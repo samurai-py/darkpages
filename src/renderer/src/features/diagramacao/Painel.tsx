@@ -2,10 +2,10 @@ import type { ReactElement } from 'react'
 import type { FrontMatter } from '../../../../shared/types'
 import { NumField, Stepper, TextField } from './fields'
 import { Ico } from './icons'
+import { RotuloSeletor } from './RotuloSeletor'
 import {
   DROPCAPS,
   FOLIOS,
-  LABELS,
   OPENINGS,
   ORNAMENTS,
   PAPERS,
@@ -156,15 +156,11 @@ export function Painel({ l, set, pages, fontes, checks, checking }: Props): Reac
             <option value="par">Par (diante da abertura)</option>
           </select>
         </label>
+        <fieldset className="dg-rotulo">
+          <legend>Nome dos capítulos</legend>
+          <RotuloSeletor value={l.rotulo} onChange={(rotulo) => set({ rotulo })} />
+        </fieldset>
         <div className="dg-grid2">
-          <label className="field">
-            Rótulo
-            <select className="select" value={l.chapterLabel} onChange={(e) => set({ chapterLabel: e.target.value as FullLayout['chapterLabel'] })}>
-              {LABELS.map((d) => (
-                <option key={d.v} value={d.v}>{d.label}</option>
-              ))}
-            </select>
-          </label>
           <label className="field">
             Quebra de cena
             <select className="select" value={l.sceneOrnament} onChange={(e) => set({ sceneOrnament: e.target.value as FullLayout['sceneOrnament'] })}>

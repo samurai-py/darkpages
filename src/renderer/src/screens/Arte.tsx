@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
+import { resolveRotulo } from '../../../shared/rotulo'
+import { rotuloLongo } from '../features/manuscrito/ChapterList'
 import type { ScreenProps } from '../screen'
 import { folio } from '../api'
 import type { ArteConfig, Ficha } from '../../../shared/models'
@@ -18,12 +20,6 @@ const ABAS: Array<[Aba, string]> = [
 ]
 
 const ORDEM_TIPO: Record<Ficha['tipo'], number> = { personagem: 0, divindade: 1, lugar: 2, objeto: 3, grupo: 4 }
-
-function rotuloCap(file: string, kind: string): string {
-  if (kind === 'prologo') return 'Prólogo'
-  if (kind === 'epilogo') return 'Epílogo'
-  return `Cap. ${Number(file.slice(0, 3))}`
-}
 
 function propNum(p: [number, number] | 'livro', livro: number): number {
   return p === 'livro' ? livro : p[0] / p[1]
@@ -223,6 +219,8 @@ export function Arte({ project, go, params }: ScreenProps): ReactElement {
   }, [alvoChave, versaoAlvo, alvo, montar])
 
   const caps = project.chapters
+  const rotuloCfg = resolveRotulo(project.meta.layout)
+  const rotuloCap = (file: string): string => rotuloLongo(caps, file, rotuloCfg)
   const capsProntos = caps.filter((c) => geradas[`abertura:${c.file}`]).length
   const capsPendentes = caps.filter((c) => {
     const s = itemPorChave.get(`abertura:${c.file}`)?.status
@@ -246,7 +244,7 @@ export function Arte({ project, go, params }: ScreenProps): ReactElement {
     if (chave === 'capa') return 'Capa'
     if (chave.startsWith('retrato:')) return fichas.find((f) => f.id === chave.slice(8))?.nome ?? 'Retrato'
     const c = caps.find((x) => `abertura:${x.file}` === chave)
-    return c ? `${rotuloCap(c.file, c.kind)} · ${c.title}` : chave
+    return c ? `${rotuloCap(c.file)} · ${c.title}` : chave
   }
 
   // ---------- render ----------
@@ -385,7 +383,7 @@ export function Arte({ project, go, params }: ScreenProps): ReactElement {
                   >
                     {caps.map((c) => (
                       <option key={c.file} value={c.file}>
-                        {rotuloCap(c.file, c.kind)} · {c.title}
+                        {rotuloCap(c.file)} · {c.title}
                       </option>
                     ))}
                   </select>
@@ -564,7 +562,7 @@ export function Arte({ project, go, params }: ScreenProps): ReactElement {
                     key={c.file}
                     dir={dir}
                     rotulo={c.title}
-                    sub={rotuloCap(c.file, c.kind)}
+                    sub={rotuloCap(c.file)}
                     meta={geradas[k]}
                     status={it?.status === 'pronto' || it?.status === 'cancelado' ? undefined : it?.status}
                     erro={it?.erro}

@@ -1,6 +1,6 @@
+import { resolveRotulo } from '../../../../shared/rotulo'
 import {
   DEFAULT_LAYOUT,
-  type ChapterLabel,
   type CoverSettings,
   type DropCapStyle,
   type FolioPosition,
@@ -30,6 +30,7 @@ export function withDefaults(l: LayoutSettings): FullLayout {
     margins: { ...D.margins, ...l.margins },
     paper: { ...D.paper, ...l.paper },
     chapters: l.chapters ?? {},
+    rotulo: resolveRotulo(l),
     front: { ...D.front, ...(l.front ?? {}) },
     cover: { ...D.cover, ...(l.cover ?? {}) }
   } as FullLayout
@@ -77,13 +78,6 @@ export const ORNAMENTS: { v: SceneOrnament; label: string }[] = [
   { v: 'vinheta', label: 'Vinheta desenhada' },
   { v: 'linha', label: 'Filete' },
   { v: 'espaco', label: 'Linha em branco' }
-]
-
-export const LABELS: { v: ChapterLabel; label: string }[] = [
-  { v: 'numero', label: 'Capítulo 3' },
-  { v: 'extenso', label: 'Capítulo três' },
-  { v: 'romano', label: 'Capítulo III' },
-  { v: 'nenhum', label: 'Só o título' }
 ]
 
 export const FOLIOS: { v: FolioPosition; label: string }[] = [

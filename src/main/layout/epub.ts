@@ -7,6 +7,7 @@ import type { ChapterContent } from '../../shared/types'
 import { aberturaPath, capaFrentePath } from './assets'
 import { isbnToEan } from './cover'
 import { chapterLabelText, numberChapters, showsTitle } from './labels'
+import { rotuloTela } from '../../shared/rotulo'
 import { parseBody, type Inline } from './markdown'
 import { chapterDropCap, resolveLayout, type FullLayout } from './settings'
 
@@ -94,8 +95,10 @@ const SCENE_TEXT: Record<string, string> = {
 }
 
 function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, art: string | null): { xhtml: string; notes: number; heading: string } {
-  const label = chapterLabelText(c.kind, n, l.chapterLabel)
+  const label = chapterLabelText(c.kind, n, l.rotulo)
   const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
+  const tela = rotuloTela(c.kind, n, l.rotulo)
+  const navTitle = tela && showsTitle(c, tela) ? `${tela}: ${title}` : title
   const prefix = `c${idx}-`
   const sink: NoteSink = { notes: [], prefix }
   const { blocks } = parseBody(c.body)
@@ -143,13 +146,13 @@ ${sink.notes.map((t, i) => `<li id="${prefix}n${i + 1}" epub:type="endnote"><p>$
   const body = `<section epub:type="${type}" role="${role}" aria-labelledby="titulo">
 ${art ? `<figure class="abertura"><img src="${art}" alt="Ilustração de abertura: ${esc(title)}"/></figure>` : ''}
 <header class="abertura-cap">
-${label && showsTitle(c, label) ? `<p class="rotulo">${esc(label)}</p>` : ''}
+${label && showsTitle(c, label) ? `<p class="rotulo${l.rotulo.caixa === 'versalete' ? ' versalete' : ''}">${esc(label)}</p>` : ''}
 <h1 id="titulo">${esc(title)}</h1>
 </header>
 ${parts.join('\n')}
 ${notes}
 </section>`
-  return { xhtml: page(title, body, 'bodymatter'), notes: sink.notes.length, heading: title }
+  return { xhtml: page(title, body, 'bodymatter'), notes: sink.notes.length, heading: navTitle }
 }
 
 const CSS = `@charset "UTF-8";
@@ -160,7 +163,8 @@ p.sem-recuo, .abertura-cap + p { text-indent: 0; }
 h1 { font-weight: normal; font-size: 1.8em; text-align: center; margin: 0.2em 0 1.6em; line-height: 1.2; }
 h2 { font-weight: normal; font-style: italic; font-size: 1.1em; text-align: center; margin: 1.4em 0 0.8em; }
 .abertura-cap { margin-top: 3em; page-break-before: always; break-before: page; }
-.rotulo { text-indent: 0; text-align: center; text-transform: uppercase; letter-spacing: 0.3em; font-size: 0.8em; margin-bottom: 0.4em; }
+.rotulo.versalete { font-variant: small-caps; }
+.rotulo { text-indent: 0; text-align: center; letter-spacing: 0.3em; font-size: 0.8em; margin-bottom: 0.4em; }
 .capitular { float: left; font-size: 3.4em; line-height: 0.85; margin: 0.06em 0.08em 0 0; color: COR; }
 .cena { text-indent: 0; text-align: center; margin: 1em 0; letter-spacing: 0.4em; }
 blockquote { margin: 1em 1.5em; font-size: 0.95em; }

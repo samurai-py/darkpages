@@ -153,7 +153,7 @@ interface ChapterCtx {
 
 function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx): string {
   const { l } = ctx
-  const label = chapterLabelText(c.kind, n, l.chapterLabel)
+  const label = chapterLabelText(c.kind, n, l.rotulo)
   const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
   const rotulo = label && showsTitle(c, label) ? str(label) : 'none'
   let style = chapterOpening(l, c.file)
@@ -356,6 +356,8 @@ export function buildBookTypst(meta: ProjectMeta, chapters: ChapterContent[], as
 
 #let livro-titulo = ${str(meta.title)}
 #let corrente-ligado = ${l.runningHead}
+#let rotulo-caixa = ${str(l.rotulo.caixa)}
+#let caixa-rotulo(r) = if rotulo-caixa == "versalete" { smallcaps(r) } else { r }
 #let folio-pos = ${str(l.folio)}
 #let largura-texto = ${mm(textWidthMm)}
 
@@ -428,6 +430,12 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 #show heading.where(level: 2): it => align(center, block(above: 1.4em, below: 1em, sticky: true, text(size: 1.05em, style: "italic", weight: "regular", it.body)))
 #show outline.entry: set block(above: 0.85em)
 #set outline.entry(fill: box(width: 1fr, repeat(gap: 0.35em)[.]))
+#show outline.entry.where(level: 1): it => {
+  let s = it.element.supplement
+  if type(s) != content { it } else {
+    link(it.element.location(), it.indented(none, [#text(size: 0.82em, tracking: 0.12em, caixa-rotulo(s)) #h(0.6em) #it.inner()]))
+  }
+}
 
 // ---------- ornamentos ----------
 #let ornamento() = box(width: 3.2em, height: 0.8em, {
@@ -502,34 +510,35 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 #let capitular-elevada(letra, cor) = text(size: 2.6em, fill: cor, top-edge: "cap-height", letra)
 
 // ---------- aberturas de capítulo ----------
-#let rotulo-cap(r) = if r != none { align(center, text(size: 0.78em, tracking: 0.32em, upper(r))) }
+#let rotulo-cap(r) = if r != none { align(center, text(size: 0.78em, tracking: 0.32em, caixa-rotulo(r))) }
+#let titulo-cap(rotulo, titulo) = heading(level: 1, supplement: if rotulo == none { none } else { [#rotulo] }, titulo)
 
-#let comeco(arquivo, titulo) = {
-  marca("inicio", arquivo: arquivo, titulo: titulo)
+#let comeco(arquivo, titulo, rotulo) = {
+  marca("inicio", arquivo: arquivo, titulo: if rotulo == none { titulo } else { rotulo + " · " + titulo })
   counter(footnote).update(0)
 }
 
 #let abertura-classica(rotulo, titulo, arquivo) = {
   pagebreak(to: "odd", weak: true)
-  comeco(arquivo, titulo)
+  comeco(arquivo, titulo, rotulo)
   v(20%)
   rotulo-cap(rotulo)
-  heading(level: 1, titulo)
+  titulo-cap(rotulo, titulo)
   align(center, ornamento())
   v(2.2em)
 }
 
 #let abertura-ornamentada(rotulo, titulo, arquivo) = {
   pagebreak(to: "odd", weak: true)
-  comeco(arquivo, titulo)
+  comeco(arquivo, titulo, rotulo)
   v(14%)
   align(center, vinheta(largura: largura-texto * 0.55))
   v(1.2em)
-  if rotulo != none { align(center, text(size: 0.74em, tracking: 0.38em, smallcaps(all: true, rotulo))) }
+  if rotulo != none { align(center, text(size: 0.74em, tracking: 0.38em, if rotulo-caixa == "maiusculas" { smallcaps(all: true, rotulo) } else { caixa-rotulo(rotulo) })) }
   v(0.2em)
   {
     show heading.where(level: 1): it => align(center, block(above: 0.4em, below: 0.6em, text(size: 1.6em, tracking: 0.14em, weight: "regular", upper(it.body))))
-    heading(level: 1, titulo)
+    titulo-cap(rotulo, titulo)
   }
   align(center, line(length: 18%, stroke: 0.4pt))
   v(2.4em)
@@ -537,10 +546,10 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 
 #let abertura-simples(rotulo, titulo, arquivo) = {
   pagebreak(weak: true)
-  comeco(arquivo, titulo)
+  comeco(arquivo, titulo, rotulo)
   v(8%)
   rotulo-cap(rotulo)
-  heading(level: 1, titulo)
+  titulo-cap(rotulo, titulo)
   v(1.6em)
 }
 
@@ -554,10 +563,10 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
       image(imagem, width: ${mm(l.trim.widthMm + 2 * B)}, height: ${mm(l.trim.heightMm + 2 * B)}, fit: "cover"))
   })
   if pagina == "par" { pagebreak(to: "odd", weak: true) }
-  comeco(arquivo, titulo)
+  comeco(arquivo, titulo, rotulo)
   v(12%)
   rotulo-cap(rotulo)
-  heading(level: 1, titulo)
+  titulo-cap(rotulo, titulo)
   align(center, ornamento())
   v(2em)
 }

@@ -1,3 +1,4 @@
+import { resolveRotulo } from '../../shared/rotulo'
 import {
   DEFAULT_LAYOUT,
   type ChapterLayout,
@@ -39,6 +40,7 @@ export function resolveLayout(l: LayoutSettings): FullLayout {
     dropCapColor: color(l.dropCapColor, d.dropCapColor),
     sceneOrnament: l.sceneOrnament ?? d.sceneOrnament,
     chapterLabel: l.chapterLabel ?? d.chapterLabel,
+    rotulo: resolveRotulo(l),
     runningHead: l.runningHead ?? d.runningHead,
     folio: l.folio ?? d.folio,
     avoidWidows: l.avoidWidows ?? d.avoidWidows,

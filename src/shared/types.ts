@@ -43,8 +43,10 @@ export interface LayoutSettings {
   dropCapColor?: string
   /** ornamento da quebra de cena (*** ou ⁂ no texto) */
   sceneOrnament?: SceneOrnament
-  /** como numerar o rótulo dos capítulos */
+  /** LEGADO: como numerar o rótulo dos capítulos. Substituído por `rotulo`; lido só quando `rotulo` não existe. */
   chapterLabel?: ChapterLabel
+  /** nome dos capítulos do livro (estilo, palavra, gênero, caixa, modelo) — ver shared/rotulo.ts */
+  rotulo?: import('./rotulo').RotuloCfg
   /** cabeçalho corrente: título do livro nas pares, do capítulo nas ímpares */
   runningHead?: boolean
   /** posição do número de página */

@@ -418,3 +418,7 @@
 .ms-tela-op input { margin-top: 3px; accent-color: var(--acc); }
 .ms-tela-op b { display: block; color: var(--text); font-weight: 600; }
 .ms-tela-op small { display: block; color: var(--muted); font-size: 12px; }
+
+/* coluna de capítulos: menu da coluna */
+.ms-caps-hb { position: relative; display: flex; align-items: center; gap: 2px; }
+.ms-menu-col { right: 0; top: calc(100% + 4px); min-width: 210px; }

@@ -12,37 +12,32 @@ import {
 } from 'docx'
 import { openProject, readChapter, slugify } from '../project'
 import { atomicWrite } from '../store/docs'
+import { DEFAULT_ROTULO, resolveRotulo, rotuloTela, type RotuloCfg } from '../../shared/rotulo'
 import { parseBlocks, parseInline, runsToPlain, type Block, type Run } from './manuscrito-md'
 import type { ChapterContent, ChapterKind } from '../../shared/types'
 
 export type FormatoExport = 'docx' | 'md' | 'txt'
 
-const NUMERAIS = [
-  'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez',
-  'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte'
-]
-
-/** Rótulo acima do título: "Capítulo 3", "Prólogo", "Epílogo". */
-export function rotuloCapitulo(kind: ChapterKind, n: number): string {
-  if (kind === 'prologo') return 'Prólogo'
-  if (kind === 'epilogo') return 'Epílogo'
-  return `Capítulo ${NUMERAIS[n - 1] ?? n}`
+/** Rótulo acima do título no arquivo exportado ("Capítulo 3", "Primeiro Círculo", "Prólogo"), conforme o nome dos capítulos do livro. */
+export function rotuloCapitulo(kind: ChapterKind, n: number, cfg: RotuloCfg = DEFAULT_ROTULO): string {
+  return rotuloTela(kind, n, cfg) ?? ''
 }
 
-async function lerTodos(dir: string): Promise<{ title: string; author: string; caps: Array<ChapterContent & { n: number }> }> {
+async function lerTodos(dir: string): Promise<{ title: string; author: string; caps: Array<ChapterContent & { n: number; rotulo: string }> }> {
   const p = await openProject(dir)
-  const caps: Array<ChapterContent & { n: number }> = []
+  const caps: Array<ChapterContent & { n: number; rotulo: string }> = []
+  const cfg = resolveRotulo(p.meta.layout)
   let n = 0
   for (const c of p.chapters) {
     if (c.kind === 'capitulo') n++
-    caps.push({ ...(await readChapter(dir, c.file)), n })
+    caps.push({ ...(await readChapter(dir, c.file)), n, rotulo: rotuloCapitulo(c.kind, n, cfg) })
   }
   return { title: p.meta.title, author: p.meta.author, caps }
 }
 
 // ---------------------------------------------------------------- Markdown
 
-function exportMd(title: string, author: string, caps: Array<ChapterContent & { n: number }>): string {
+function exportMd(title: string, author: string, caps: Array<ChapterContent & { n: number; rotulo: string }>): string {
   const parts = [`% ${title}`]
   if (author) parts.push(`% ${author}`)
   parts.push('')
@@ -52,11 +47,11 @@ function exportMd(title: string, author: string, caps: Array<ChapterContent & { 
 
 // ---------------------------------------------------------------- Texto puro
 
-function exportTxt(title: string, author: string, caps: Array<ChapterContent & { n: number }>): string {
+function exportTxt(title: string, author: string, caps: Array<ChapterContent & { n: number; rotulo: string }>): string {
   const out: string[] = [title.toUpperCase(), author, '', '']
   for (const c of caps) {
     const notas: string[] = []
-    out.push(rotuloCapitulo(c.kind, c.n).toUpperCase(), c.title, '')
+    out.push(c.rotulo.toUpperCase(), c.title, '')
     for (const b of parseBlocks(c.body)) {
       if (b.kind === 'cena') out.push('* * *', '')
       else
@@ -80,7 +75,7 @@ function exportTxt(title: string, author: string, caps: Array<ChapterContent & {
 
 // ---------------------------------------------------------------- DOCX
 
-function exportDocx(title: string, author: string, caps: Array<ChapterContent & { n: number }>): Promise<Buffer> {
+function exportDocx(title: string, author: string, caps: Array<ChapterContent & { n: number; rotulo: string }>): Promise<Buffer> {
   const footnotes: Record<number, { children: Paragraph[] }> = {}
   let nextNote = 1
 
@@ -101,7 +96,7 @@ function exportDocx(title: string, author: string, caps: Array<ChapterContent & 
         alignment: AlignmentType.CENTER,
         pageBreakBefore: i > 0,
         spacing: { before: 1200, after: 120 },
-        children: [new TextRun({ text: rotuloCapitulo(c.kind, c.n).toUpperCase(), size: 18, characterSpacing: 40 })]
+        children: [new TextRun({ text: c.rotulo.toUpperCase(), size: 18, characterSpacing: 40 })]
       }),
       new Paragraph({
         heading: HeadingLevel.HEADING_1,

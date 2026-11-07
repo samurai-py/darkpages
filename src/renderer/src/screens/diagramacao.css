@@ -130,3 +130,6 @@ textarea.input { padding: 8px 10px; min-height: 76px; resize: vertical; line-hei
   .dg-side { width: 270px; }
   .dg-sum { display: none; }
 }
+
+.dg-rotulo { margin: 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.dg-rotulo legend { padding: 0 6px; font-size: 12px; color: var(--muted); }

@@ -3,6 +3,7 @@ import type { ChapterInfo, ChapterKind } from '../../../../shared/types'
 import { Ico } from './icones'
 import { Modal } from './Modal'
 import { fmt } from './texto'
+import { DEFAULT_ROTULO, romano, rotuloTela, type RotuloCfg } from '../../../../shared/rotulo'
 
 export interface Metas {
   metaCapitulo: number
@@ -24,34 +25,35 @@ interface Props {
   onExcluir: (file: string) => Promise<void>
   onImportar: () => void
   onExportar: () => void
+  /** nome dos capítulos do livro */
+  rotulo: RotuloCfg
+  /** abre o seletor "Nome dos capítulos…" */
+  onNomeCapitulos: () => void
 }
 
-export function rotuloCurto(caps: ChapterInfo[], i: number): string {
+/** Número curto na coluna (algarismo, ou romano quando o livro usa romanos). */
+export function rotuloCurto(caps: ChapterInfo[], i: number, cfg: RotuloCfg = DEFAULT_ROTULO): string {
   const c = caps[i]
   if (!c) return ''
   if (c.kind === 'prologo') return 'Pról.'
   if (c.kind === 'epilogo') return 'Epíl.'
-  return String(caps.slice(0, i + 1).filter((x) => x.kind === 'capitulo').length)
+  const n = caps.slice(0, i + 1).filter((x) => x.kind === 'capitulo').length
+  return cfg.estilo === 'romano' || cfg.estilo === 'romano-palavra' ? romano(n) : String(n)
 }
 
-const NUM = [
-  'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze', 'catorze',
-  'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte'
-]
-
-export function rotuloLongo(caps: ChapterInfo[], file: string): string {
+/** Rótulo completo ("Capítulo um", "Primeiro Círculo", "Prólogo"), em caixa normal. */
+export function rotuloLongo(caps: ChapterInfo[], file: string, cfg: RotuloCfg = DEFAULT_ROTULO): string {
   const i = caps.findIndex((c) => c.file === file)
   const c = caps[i]
   if (!c) return ''
-  if (c.kind === 'prologo') return 'Prólogo'
-  if (c.kind === 'epilogo') return 'Epílogo'
   const n = caps.slice(0, i + 1).filter((x) => x.kind === 'capitulo').length
-  return `Capítulo ${NUM[n - 1] ?? n}`
+  return rotuloTela(c.kind, n, cfg) ?? ''
 }
 
 export function ChapterList(p: Props): ReactElement {
   const [novo, setNovo] = useState<string | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
+  const [menuCol, setMenuCol] = useState(false)
   const [renomeando, setRenomeando] = useState<{ file: string; titulo: string } | null>(null)
   const [excluir, setExcluir] = useState<ChapterInfo | null>(null)
   const [editMetas, setEditMetas] = useState(false)
@@ -112,9 +114,27 @@ export function ChapterList(p: Props): ReactElement {
     <aside className="ms-caps" aria-label="Capítulos" aria-busy={ocupado}>
       <header className="ms-caps-h">
         <span className="ms-eb">Capítulos · {caps.length}</span>
-        <button type="button" className="ms-ib ms-ib-acc" aria-label="Novo capítulo" onClick={() => setNovo((v) => (v === null ? '' : null))}>
-          <Ico n="mais" size={16} />
-        </button>
+        <span className="ms-caps-hb">
+          <button
+            type="button"
+            className="ms-ib"
+            aria-label="Opções da coluna de capítulos"
+            aria-expanded={menuCol}
+            onClick={() => setMenuCol((v) => !v)}
+          >
+            <Ico n="menu" size={16} />
+          </button>
+          <button type="button" className="ms-ib ms-ib-acc" aria-label="Novo capítulo" onClick={() => setNovo((v) => (v === null ? '' : null))}>
+            <Ico n="mais" size={16} />
+          </button>
+          {menuCol && (
+            <div className="ms-menu panel ms-menu-col" role="menu" onKeyDown={(e) => e.key === 'Escape' && setMenuCol(false)}>
+              <button type="button" role="menuitem" onClick={() => (setMenuCol(false), p.onNomeCapitulos())}>
+                <Ico n="lapis" size={14} /> Nome dos capítulos…
+              </button>
+            </div>
+          )}
+        </span>
       </header>
 
       {novo !== null && (
@@ -209,7 +229,9 @@ export function ChapterList(p: Props): ReactElement {
                     onClick={() => p.onAbrir(c.file)}
                     onDoubleClick={() => setRenomeando({ file: c.file, titulo: c.title })}
                   >
-                    <span className={`ms-ch-n${c.kind !== 'capitulo' ? ' esp' : ''}`}>{rotuloCurto(caps, i)}</span>
+                    <span className={`ms-ch-n${c.kind !== 'capitulo' ? ' esp' : ''}`} title={rotuloLongo(caps, c.file, p.rotulo)}>
+                      {rotuloCurto(caps, i, p.rotulo)}
+                    </span>
                     <span className="ms-ch-m">
                       <span className="ms-ch-t">{c.title}</span>
                       <span

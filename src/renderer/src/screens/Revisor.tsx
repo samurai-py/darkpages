@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { resolveRotulo, type RotuloCfg } from '../../../shared/rotulo'
+import { rotuloLongo } from '../features/manuscrito/ChapterList'
 import type { ScreenProps } from '../screen'
+import type { ChapterInfo } from '../../../shared/types'
 import { folio } from '../api'
 import type { BetaLeitura, Sugestao, SugestaoCategoria } from '../../../shared/models'
 import { ia, type StatusIa } from '../features/ia/api'
@@ -26,8 +29,9 @@ const NOTAS: Array<{ k: keyof BetaLeitura['notas']; nome: string }> = [
   { k: 'personagens', nome: 'Personagens' }
 ]
 
-function rotuloCapitulo(i: number, title: string): string {
-  return `${String(i + 1).padStart(2, '0')} · ${title}`
+function rotuloCapitulo(chapters: ChapterInfo[], file: string, title: string, cfg: RotuloCfg): string {
+  const r = rotuloLongo(chapters, file, cfg)
+  return r && r !== title ? `${r} · ${title}` : title
 }
 
 /** Erro com dica de configuração: oferece atalho para Ajustes. */
@@ -51,6 +55,7 @@ function Erro({ msg, onAjustes }: { msg: string; onAjustes: () => void }): React
 export function Revisor({ project, onProject, go, params }: ScreenProps): ReactElement {
   const dir = project.dir
   const chapters = project.chapters
+  const rotuloCfg = resolveRotulo(project.meta.layout)
   const [file, setFile] = useState<string>(() =>
     params.chapter && chapters.some((c) => c.file === params.chapter) ? params.chapter : (chapters[0]?.file ?? '')
   )
@@ -215,9 +220,9 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
         <label className="field">
           Capítulo
           <select className="select" value={file} onChange={(e) => setFile(e.target.value)}>
-            {chapters.map((c, i) => (
+            {chapters.map((c) => (
               <option key={c.file} value={c.file}>
-                {rotuloCapitulo(i, c.title)}
+                {rotuloCapitulo(chapters, c.file, c.title, rotuloCfg)}
               </option>
             ))}
           </select>

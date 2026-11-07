@@ -1,0 +1,5 @@
+.rt-sel { display: flex; flex-direction: column; gap: 10px; }
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.rt-dica { font-size: 11px; color: var(--muted); }
+.rt-prev { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; color: var(--muted); }
+.rt-prev.versalete { font-variant-caps: small-caps; }

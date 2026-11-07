@@ -19,6 +19,8 @@ import { Exportar, Importar } from '../features/manuscrito/ImportExport'
 import { Ico } from '../features/manuscrito/icones'
 import { fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '../features/manuscrito/texto'
 import type { Furo } from '../features/manuscrito/extensions'
+import { NomeCapitulos } from '../features/manuscrito/NomeCapitulos'
+import { resolveRotulo } from '../../../shared/rotulo'
 import { SyncStatus } from '../features/sync/SyncStatus'
 import { SpotifyPlayer } from '../features/spotify/Player'
 import './manuscrito.css'
@@ -149,7 +151,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const [checando, setChecando] = useState(false)
   const [erroCont, setErroCont] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [modal, setModal] = useState<'importar' | 'exportar' | null>(null)
+  const [modal, setModal] = useState<'importar' | 'exportar' | 'rotulo' | null>(null)
 
   const root = useRef<HTMLDivElement>(null)
   const bodyRef = useRef('')
@@ -636,7 +638,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const paginasCap = paginasCapitulo(palavrasCap, layout)
   const st = estadoSalvo(corpo.state, meta.state)
   const presentes = useMemo(() => fichasNoTexto(`${title}\n${textoLento}`, fichas), [textoLento, title, fichas])
-  const rotulo = current ? rotuloLongo(project.chapters, current) : ''
+  const rotuloCfg = resolveRotulo(project.meta.layout)
+  const rotulo = current ? rotuloLongo(project.chapters, current, rotuloCfg) : ''
 
   return (
     <div ref={root} className={`screen ms${foco ? ' ms-foco' : ''}`}>
@@ -655,6 +658,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           onExcluir={excluir}
           onImportar={() => setModal('importar')}
           onExportar={() => setModal('exportar')}
+          rotulo={rotuloCfg}
+          onNomeCapitulos={() => setModal('rotulo')}
         />
       )}
 
@@ -837,6 +842,17 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
               if (criados[0]) setCurrent(criados[0])
               toast({ id: 'imp', tipo: 'info', titulo: 'Importação concluída', texto: `${criados.length} ${criados.length === 1 ? 'capítulo entrou' : 'capítulos entraram'} no fim do livro.` })
             })
+          }}
+        />
+      )}
+      {modal === 'rotulo' && (
+        <NomeCapitulos
+          project={project}
+          onClose={() => setModal(null)}
+          onFeito={(p) => {
+            onProject(p)
+            setModal(null)
+            toast({ id: 'rotulo', tipo: 'info', titulo: 'Nome dos capítulos', texto: 'Atualizado no livro inteiro.' })
           }}
         />
       )}
