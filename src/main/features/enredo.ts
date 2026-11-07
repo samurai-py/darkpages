@@ -1,9 +1,9 @@
 import { bookDir, str, type Handlers } from '../api/context'
-import { getDoc, listDocs, newId, putDoc } from '../store/docs'
+import { deleteAsset, getDoc, listDocs, newId, putDoc } from '../store/docs'
 import { openProject, readChapter } from '../project'
 import { desligarDosMapas } from './mapas'
 import { calcularImpacto } from '../../shared/narrativa'
-import type { Cartao, CartaoEstado, CartaoTipo, EnredoBoard, Ficha, ImpactoItem, Ligacao } from '../../shared/models'
+import { imagemCartaoValida, PREFIXO_IMAGEM_CARTAO, type Cartao, type CartaoEstado, type CartaoTipo, type EnredoBoard, type Ficha, type ImpactoItem, type Ligacao } from '../../shared/models'
 
 /**
  * Enredo (E1–E5): quadro único na coleção "enredo", documento "board".
@@ -72,7 +72,23 @@ function cartao(v: unknown): Cartao | null {
     const resolveEm = texto(fio.resolveEm, 40)
     out.fio = { status: fio.status === 'resolvido' ? 'resolvido' : 'aberto', ...(CAP_ID.test(resolveEm) ? { resolveEm } : {}) }
   }
+  // imagem: só nome de arquivo dentro de <livro>/assets/ (nada de pastas ou "..")
+  if (imagemCartaoValida(c.imagem)) out.imagem = c.imagem
   return out
+}
+
+/**
+ * Imagens que o Enredo enviou ("cartao-…") e que saíram do quadro: o cartão foi
+ * excluído ou trocou/tirou a imagem, e nenhum outro cartão aponta para ela.
+ * Imagens com outro nome (vindas da importação) nunca são apagadas.
+ */
+export function imagensOrfas(antes: EnredoBoard, depois: EnredoBoard): string[] {
+  const ficam = new Set(depois.cartoes.map((c) => c.imagem).filter(Boolean))
+  const sairam = new Set<string>()
+  for (const c of antes.cartoes) {
+    if (c.imagem && c.imagem.startsWith(PREFIXO_IMAGEM_CARTAO) && !ficam.has(c.imagem)) sairam.add(c.imagem)
+  }
+  return [...sairam]
 }
 
 /** Saneia um quadro vindo da interface ou do disco. */
@@ -130,7 +146,8 @@ export const handlers: Handlers = {
 
   /**
    * 'enredo.salvar'(dir, board) → EnredoBoard saneado e gravado.
-   * Cartões que saíram do quadro também saem das ligações dos mapas.
+   * Cartões que saíram do quadro também saem das ligações dos mapas, e as
+   * imagens que ficaram sem cartão saem de assets/.
    */
   'enredo.salvar': async (ctx, dir, board): Promise<EnredoBoard> => {
     const d = await bookDir(ctx, dir)
@@ -141,6 +158,7 @@ export const handlers: Handlers = {
     const ficam = new Set(limpo.cartoes.map((c) => c.id))
     const sairam = antes.cartoes.filter((c) => !ficam.has(c.id)).map((c) => c.id)
     if (sairam.length) await desligarDosMapas(d, { cartoes: sairam })
+    for (const nome of imagensOrfas(antes, limpo)) await deleteAsset(d, nome).catch(() => undefined)
     return limpo
   },
 

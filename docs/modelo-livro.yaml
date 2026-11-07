@@ -116,6 +116,7 @@ cartoes:
     capitulo: Segunda Morte
     fichas: [Viktor]
     texto: Ele cai no rio e acorda de novo na margem.
+    # imagem: rio.png   # opcional: arquivo que já está na pasta assets/ do livro (png, jpg, jpeg, webp)
 
   # FATO = verdade do livro. revelar_em = capítulo a partir do qual o leitor pode
   # saber. termos = palavras que entregam o segredo (o app avisa se aparecerem antes).

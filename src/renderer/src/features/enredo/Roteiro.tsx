@@ -5,8 +5,11 @@ import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { doCapitulo, rotuloCapitulo, vizinho } from './board'
 import { FioSelo, Selo } from './Selo'
+import { CartaoImagem } from './imagem'
 
 export interface RoteiroProps {
+  /** pasta do livro (imagens dos cartões) */
+  dir: string
   board: EnredoBoard
   chapters: ChapterInfo[]
   fichas: Map<string, Ficha>
@@ -89,21 +92,24 @@ export function Roteiro(props: RoteiroProps): ReactElement {
                   </span>
                   <span className="en-rn">{n}</span>
                   <button type="button" className="en-rbody" onClick={() => props.onSel(c.id)} aria-current={c.id === selId ? 'true' : undefined}>
-                    <span className="en-rtl">
-                      <span className="disp en-rt">{c.titulo || 'Cena sem título'}</span>
-                      <Selo c={c} />
-                      <FioSelo c={c} chapters={chapters} />
-                    </span>
-                    {c.texto && <span className="en-rx">{c.texto}</span>}
-                    {ligadas.length > 0 && (
-                      <span className="en-fichas">
-                        {ligadas.map((f) => (
-                          <span key={f.id} className="en-fchip">
-                            {f.nome}
-                          </span>
-                        ))}
+                    {c.imagem && <CartaoImagem dir={props.dir} nome={c.imagem} className="en-rthumb" />}
+                    <span className="en-rcol">
+                      <span className="en-rtl">
+                        <span className="disp en-rt">{c.titulo || 'Cena sem título'}</span>
+                        <Selo c={c} />
+                        <FioSelo c={c} chapters={chapters} />
                       </span>
-                    )}
+                      {c.texto && <span className="en-rx">{c.texto}</span>}
+                      {ligadas.length > 0 && (
+                        <span className="en-fichas">
+                          {ligadas.map((f) => (
+                            <span key={f.id} className="en-fchip">
+                              {f.nome}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
                   </button>
                   <span className="en-rmove">
                     <button

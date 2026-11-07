@@ -5,6 +5,7 @@ import { Retrato } from '../universo/Retrato'
 import { Mini } from '../universo/icons'
 import { CARTAO_ROTULO } from './board'
 import { Selo } from './Selo'
+import { CartaoImagem } from './imagem'
 
 export type CartaoData = {
   cartao: Cartao
@@ -14,6 +15,8 @@ export type CartaoData = {
   fichas: Ficha[]
   /** retrato da primeira ficha (cartão de personagem) */
   retrato: string | null | undefined
+  /** pasta do livro (para ler a imagem do cartão em assets/) */
+  dir: string
 }
 
 export type CartaoNodeT = Node<CartaoData, 'cartao'>
@@ -30,7 +33,7 @@ function Alcas(): ReactElement {
 }
 
 function CartaoNodeBase({ data, selected }: NodeProps<CartaoNodeT>): ReactElement {
-  const { cartao: c, cap, fichas, retrato } = data
+  const { cartao: c, cap, fichas, retrato, dir } = data
   if (c.tipo === 'personagem') {
     const f = fichas[0]
     const nome = f?.nome || c.titulo || 'Sem ficha'
@@ -39,7 +42,14 @@ function CartaoNodeBase({ data, selected }: NodeProps<CartaoNodeT>): ReactElemen
       <div className={`en-person es-${c.estado}${selected ? ' sel' : ''}`}>
         <Alcas />
         <span className="en-face">
-          {f ? <Retrato ficha={f} url={retrato} /> : <Retrato ficha={{ nome, tipo: 'personagem' }} url={null} />}
+          {/* a imagem do próprio cartão vale mais que o retrato da ficha */}
+          {c.imagem ? (
+            <CartaoImagem dir={dir} nome={c.imagem} className="en-face-img" />
+          ) : f ? (
+            <Retrato ficha={f} url={retrato} />
+          ) : (
+            <Retrato ficha={{ nome, tipo: 'personagem' }} url={null} />
+          )}
         </span>
         <span className="disp en-pname">{nome}</span>
         {sub && <span className="en-prole">{sub}</span>}
@@ -48,8 +58,9 @@ function CartaoNodeBase({ data, selected }: NodeProps<CartaoNodeT>): ReactElemen
     )
   }
   return (
-    <div className={`en-card en-${c.tipo} es-${c.estado}${selected ? ' sel' : ''}`}>
+    <div className={`en-card en-${c.tipo} es-${c.estado}${selected ? ' sel' : ''}${c.imagem ? ' com-img' : ''}`}>
       <Alcas />
+      {c.imagem && <CartaoImagem dir={dir} nome={c.imagem} className="en-thumb" />}
       <span className="en-eb">
         <Mini name={c.tipo} size={13} />
         {CARTAO_ROTULO[c.tipo].um}

@@ -107,7 +107,22 @@ export interface Cartao {
   termos?: string[]
   /** qualquer tipo: o cartão é um fio solto (plantado no capítulo do cartão) */
   fio?: FioCartao
+  /** imagem do cartão: nome do arquivo em <livro>/assets/ (ver IMAGEM_CARTAO). Não vai para a IA. */
+  imagem?: string
 }
+
+/**
+ * Imagem de cartão: só nome de arquivo (sem pasta), png/jpg/jpeg/webp.
+ * Enviadas pelo app se chamam "cartao-<id>-<ts>.<ext>"; importadas podem ter outro nome.
+ */
+export const IMAGEM_CARTAO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,94}\.(?:png|jpe?g|webp)$/i
+
+/** Nome de imagem de cartão aceitável (sem pastas, sem "..", extensão de imagem, até 100 caracteres). */
+export function imagemCartaoValida(nome: unknown): nome is string {
+  return typeof nome === 'string' && IMAGEM_CARTAO.test(nome) && !nome.includes('..')
+}
+/** Prefixo das imagens que o próprio Enredo envia (só essas o app apaga sozinho). */
+export const PREFIXO_IMAGEM_CARTAO = 'cartao-'
 
 export interface Ligacao {
   id: string

@@ -7,7 +7,7 @@ const A = { style: { fill: 'var(--acc)' }, stroke: 'none' } as const
 
 export type MiniIcone =
   | 'busca' | 'mais' | 'fechar' | 'lixo' | 'enviar' | 'faisca' | 'abrir' | 'subir' | 'descer'
-  | 'importar' | 'arrastar' | 'capitulo' | 'ligar'
+  | 'importar' | 'arrastar' | 'capitulo' | 'ligar' | 'imagem'
   | 'personagem' | 'lugar' | 'objeto' | 'grupo' | 'divindade'
   | 'cena' | 'virada' | 'ideia' | 'local' | 'fato'
   | 'fio' | 'leitor' | 'impacto' | 'historico'
@@ -137,6 +137,15 @@ const P: Record<MiniIcone, ReactElement> = {
   ),
   subir: <path d="M6 14l6-6 6 6" />,
   descer: <path d="M6 10l6 6 6-6" />,
+  /** imagem do cartão: moldura com morro e lua no acento */
+  imagem: (
+    <>
+      <path d="M4 5.5h16v13H4z" {...D} />
+      <path d="M4 5.5h16v13H4z" />
+      <path d="M4 16l4.6-4.6 3.4 3.4 2.4-2.4L20 18" />
+      <circle cx="15.6" cy="9.2" r="1.7" {...A} />
+    </>
+  ),
   importar: (
     <>
       <path d="M4 5.5h6.5l1.5 2h8v11H4z" {...D} />

@@ -2,6 +2,8 @@
  * Contratos da importação de "regras e dados" do livro inteiro (formato
  * "folio-livro", versão 1 — ver docs/modelo-livro.yaml e docs/IMPORTAR.md).
  * Métodos 'importar.*' em src/main/features/importar.ts. DONO: Biblioteca.
+ * Cartões aceitam `imagem:` com o nome de um arquivo já presente em
+ * <livro>/assets/ (ausente → aviso, campo ignorado); a exportação a escreve.
  */
 import type { Project } from './types'
 

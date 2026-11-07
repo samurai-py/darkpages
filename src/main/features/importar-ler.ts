@@ -1,5 +1,5 @@
 import YAML, { LineCounter, type Document } from 'yaml'
-import type { CartaoTipo, FichaTipo, PerfilObra } from '../../shared/models'
+import { imagemCartaoValida, type CartaoTipo, type FichaTipo, type PerfilObra } from '../../shared/models'
 import type { ChapterKind } from '../../shared/types'
 import type { CaixaRotulo, EstiloRotulo, Genero, RotuloCfg } from '../../shared/rotulo'
 import { FORMATO_LIVRO, MAX_IMPORTACAO, VERSAO_LIVRO, type MsgPrevia } from '../../shared/importar'
@@ -82,6 +82,8 @@ export interface CartaoIn {
   revelarEm?: string
   termos?: string[]
   fio?: { status?: 'aberto' | 'resolvido'; resolveEm?: string }
+  /** nome de um arquivo que já está em <livro>/assets/ */
+  imagem?: string
 }
 export interface LigacaoIn {
   linha?: number
@@ -372,7 +374,7 @@ function lerCapitulo(ctx: Ctx, cam: Caminho, o: Obj, i: number): CapIn | null {
 function lerCartao(ctx: Ctx, cam: Caminho, o: Obj, i: number): CartaoIn | null {
   const t = typeof o.titulo === 'string' ? o.titulo.trim() : ''
   const m = new Mapa(ctx, cam, o, t ? `cartoes › “${t}”` : `cartoes › item ${i + 1}`)
-  m.chaves(['titulo', 'tipo', 'texto', 'capitulo', 'fichas', 'perspectiva', 'revelar_em', 'termos', 'fio'])
+  m.chaves(['titulo', 'tipo', 'texto', 'capitulo', 'fichas', 'perspectiva', 'revelar_em', 'termos', 'fio', 'imagem'])
   const titulo = m.obrigatorio('titulo', 300)
   const c: CartaoIn = {
     linha: ctx.linha(cam),
@@ -403,6 +405,11 @@ function lerCartao(ctx: Ctx, cam: Caminho, o: Obj, i: number): CartaoIn | null {
     fio.chaves(['status', 'resolve_em'])
     c.fio = { status: fio.opcao('status', STATUS_FIO), resolveEm: fio.texto('resolve_em', 300) }
     m.junta(fio)
+  }
+  const imagem = m.texto('imagem', 300)
+  if (imagem !== undefined) {
+    if (imagemCartaoValida(imagem)) c.imagem = imagem
+    else ctx.aviso([...cam, 'imagem'], `${m.onde}: imagem “${imagem}” deve ser só o nome de um arquivo .png, .jpg, .jpeg ou .webp da pasta assets/ do livro (sem pastas); ignorada.`)
   }
   return m.falhou ? null : c
 }

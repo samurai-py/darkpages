@@ -10,6 +10,7 @@ import { Quadro, type Selecao } from '../features/enredo/Quadro'
 import { Roteiro } from '../features/enredo/Roteiro'
 import { Mural } from '../features/enredo/Mural'
 import { CartaoPanel } from '../features/enredo/CartaoPanel'
+import { apagarImagemOrfa, esquecerImagemCartao } from '../features/enredo/imagem'
 import { Memoria } from '../features/enredo/Memoria'
 import { Leitor } from '../features/enredo/Leitor'
 import { FILTROS_ESTADO, passaFiltro, type FiltroEstado } from '../features/enredo/Selo'
@@ -132,6 +133,9 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
   const fichasMap = useMemo(() => new Map(fichas.map((f) => [f.id, f])), [fichas])
   const retratos = useRetratos(dir, fichas)
   const b = board ?? BOARD_VAZIO
+  // quadro mais recente para as ações assíncronas (envio de imagem termina depois)
+  const boardRef = useRef(b)
+  boardRef.current = b
   // filtro de origem/estado: as visões só mostram; as mudanças vão para o quadro inteiro
   const bVisivel = useMemo((): EnredoBoard => {
     if (filtroEstado === 'todos') return b
@@ -189,6 +193,30 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
     if (sel?.tipo === 'ligacao' && fora.has(sel.id)) setSel(null)
   }
 
+  /** Troca ou tira a imagem do cartão; a antiga sai de assets/ se nenhum cartão a usa. */
+  const trocarImagem = (id: string, nome: string | undefined): void => {
+    const antiga = boardRef.current.cartoes.find((c) => c.id === id)?.imagem
+    if (antiga === nome) return
+    mudar((bb) => ({
+      ...bb,
+      cartoes: bb.cartoes.map((c) => {
+        if (c.id !== id) return c
+        if (nome) return { ...c, imagem: nome }
+        const { imagem: _i, ...resto } = c
+        return resto
+      })
+    }))
+    void apagarImagemOrfa(dir, boardRef.current, antiga, id)
+  }
+
+  const excluirCartao = (id: string): void => {
+    const c = boardRef.current.cartoes.find((x) => x.id === id)
+    mudar((bb) => removerCartoes(bb, [id]))
+    setSel(null)
+    // o arquivo sai de assets/ ao salvar (o servidor confere se ficou sem uso)
+    if (c?.imagem && !boardRef.current.cartoes.some((x) => x.id !== id && x.imagem === c.imagem)) esquecerImagemCartao(dir, c.imagem)
+  }
+
   const abrirCapitulo = (chapter: string): void => void sair(() => go('manuscrito', { chapter }))
   const abrirFicha = (ficha: string): void => void sair(() => go('universo', { ficha }))
 
@@ -207,6 +235,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
   const painel =
     sel && sel.tipo !== 'multi' ? (
       <CartaoPanel
+        dir={dir}
         board={b}
         cartaoId={sel.tipo === 'cartao' ? sel.id : undefined}
         ligacaoId={sel.tipo === 'ligacao' ? sel.id : undefined}
@@ -216,10 +245,8 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
         onCartao={(c) => mudar((bb) => ({ ...bb, cartoes: bb.cartoes.map((x) => (x.id === c.id ? c : x)) }))}
         onMoverPara={(id, cap) => moverRoteiro(id, cap, null)}
         onLigacao={(l) => mudar((bb) => ({ ...bb, ligacoes: bb.ligacoes.map((x) => (x.id === l.id ? l : x)) }))}
-        onExcluirCartao={(id) => {
-          mudar((bb) => removerCartoes(bb, [id]))
-          setSel(null)
-        }}
+        onImagem={trocarImagem}
+        onExcluirCartao={excluirCartao}
         onExcluirLigacao={(id) => removerLigacoes([id])}
         onSelCartao={(id) => selecionarCartao(id)}
         onSelLigacao={(id) => setSel({ tipo: 'ligacao', id })}
@@ -287,6 +314,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
           {visao === 'memoria' && <Memoria dir={dir} chapters={chapters} onAbrirCapitulo={abrirCapitulo} />}
           {board && visao === 'quadro' && (
             <Quadro
+              dir={dir}
               board={bVisivel}
               fichas={fichasMap}
               retratos={retratos}
@@ -304,6 +332,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
           )}
           {board && visao === 'roteiro' && (
             <Roteiro
+              dir={dir}
               board={bVisivel}
               chapters={chapters}
               fichas={fichasMap}
@@ -320,6 +349,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
           )}
           {board && visao === 'mural' && (
             <Mural
+              dir={dir}
               board={bVisivel}
               chapters={chapters}
               fichas={fichasMap}

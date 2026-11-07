@@ -6,8 +6,11 @@ import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { CARTAO_ROTULO, doCapitulo, rotuloCapitulo } from './board'
 import { FioSelo, Selo } from './Selo'
+import { CartaoImagem } from './imagem'
 
 export interface MuralProps {
+  /** pasta do livro (imagens dos cartões) */
+  dir: string
   board: EnredoBoard
   chapters: ChapterInfo[]
   fichas: Map<string, Ficha>
@@ -79,6 +82,7 @@ export function Mural(props: MuralProps): ReactElement {
                   {...soltavel(`m:${c.id}`, setSobre, (id) => props.onMover(id, col.cap, c.id))}
                 >
                   <button type="button" className="en-mbtn" onClick={() => props.onSel(c.id)} aria-current={c.id === selId ? 'true' : undefined}>
+                    {c.imagem && <CartaoImagem dir={props.dir} nome={c.imagem} className="en-mthumb" />}
                     <span className="en-eb">
                       <Mini name={c.tipo} size={13} /> {CARTAO_ROTULO[c.tipo].um}
                     </span>

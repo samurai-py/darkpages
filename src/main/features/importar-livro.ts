@@ -1,17 +1,18 @@
-import { rm } from 'node:fs/promises'
+import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import YAML from 'yaml'
 import { appendChapters, novoIdCapitulo, openProject, readChapter, saveChapter, saveLayout, saveMeta, slugify, updateChapterMeta } from '../project'
 import { snapshotAgora } from '../arca'
-import { getDoc, listDocs, newId, putDoc } from '../store/docs'
+import { deleteAsset, getDoc, listDocs, newId, putDoc } from '../store/docs'
 import { lerPerfil, salvarPerfil, sanearPerfil } from '../ai/perfil'
 import { adicionarDecisao, listarDecisoes } from '../ai/decisoes'
-import { sanearBoard } from './enredo'
+import { imagensOrfas, sanearBoard } from './enredo'
 import { normalizar } from '../../shared/decisoes'
 import { resolveRotulo, resolveRotuloParte, type RotuloCfg } from '../../shared/rotulo'
 import { DEFAULT_LAYOUT, type ChapterKind, type CoverSettings, type EpigrafeCap, type FrontMatter, type LayoutSettings, type Project } from '../../shared/types'
 import {
   PERFIL_PADRAO,
+  imagemCartaoValida,
   type Cartao,
   type CenaMeta,
   type DecisaoRevisao,
@@ -68,6 +69,8 @@ export interface EstadoLivro {
   perfil: PerfilObra
   decisoes: DecisaoRevisao[]
   metas: Metas
+  /** imagens que existem em <livro>/assets/ (para validar `imagem:` dos cartões) */
+  assets?: string[]
 }
 
 const numOk = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : undefined)
@@ -142,7 +145,8 @@ export async function lerEstado(dir: string): Promise<EstadoLivro> {
     board: sanearBoard(await getDoc<EnredoBoard>(dir, 'enredo', 'board')),
     perfil: await lerPerfil(dir),
     decisoes: await listarDecisoes(dir),
-    metas: await lerMetas(dir)
+    metas: await lerMetas(dir),
+    assets: (await readdir(join(dir, 'assets')).catch(() => [] as string[])).filter((n) => imagemCartaoValida(n))
   }
 }
 
@@ -157,7 +161,8 @@ export function estadoVazio(title = '', author = ''): EstadoLivro {
     board: { cartoes: [], ligacoes: [] },
     perfil: { ...PERFIL_PADRAO },
     decisoes: [],
-    metas: {}
+    metas: {},
+    assets: []
   }
 }
 
@@ -570,6 +575,7 @@ export function planejar(estado: EstadoLivro, dados: ArquivoLivro, agora = new D
 
   // ---------- cartões
   const board: EnredoBoard = structuredClone(estado.board)
+  const assets = new Set(estado.assets ?? [])
   let mudouBoard = false
   const fundo = board.cartoes.reduce((max, c) => Math.max(max, c.y + ALT_CARTAO), 0)
   const y0 = board.cartoes.length ? fundo + 80 : 60
@@ -664,6 +670,13 @@ export function planejar(estado: EstadoLivro, dados: ArquivoLivro, agora = new D
       if (JSON.stringify(fio) !== JSON.stringify(base.fio)) {
         base.fio = fio
         m.push('fio solto')
+      }
+    }
+    if (c.imagem) {
+      if (!assets.has(c.imagem)) aviso(c.linha, `${onde}: a imagem “${c.imagem}” não está na pasta assets/ do livro; ignorada.`)
+      else if (c.imagem !== base.imagem) {
+        base.imagem = c.imagem
+        m.push(`imagem: ${c.imagem}`)
       }
     }
     if (!existente) {
@@ -775,7 +788,10 @@ export async function aplicarAlvo(dir: string, alvo: Alvo): Promise<void> {
       ...alvo.board,
       cartoes: alvo.board.cartoes.map((c) => (c.capitulo && arquivos.has(c.capitulo) ? { ...c, capitulo: arquivos.get(c.capitulo) } : c))
     }
-    await putDoc(dir, 'enredo', 'board', sanearBoard(board))
+    const antes = sanearBoard(await getDoc<EnredoBoard>(dir, 'enredo', 'board'))
+    const novo = sanearBoard(board)
+    await putDoc(dir, 'enredo', 'board', novo)
+    for (const nome of imagensOrfas(antes, novo)) await deleteAsset(dir, nome).catch(() => undefined)
   }
   if (alvo.perfil) await salvarPerfil(dir, alvo.perfil)
   for (const d of alvo.decisoes) await adicionarDecisao(dir, d)
@@ -925,6 +941,7 @@ export function exportarYaml(estado: EstadoLivro, opcoes: OpcoesExport = {}): st
         tipo: c.tipo,
         capitulo: c.capitulo ? capPorFile.get(c.capitulo) : undefined,
         fichas: c.fichas.filter((id) => fichaNome.has(id)).map((id) => fichaNome.get(id) as string),
+        imagem: c.imagem,
         texto: c.texto,
         perspectiva: persp,
         revelar_em: fato && c.revelarEm ? capPorId.get(c.revelarEm) : undefined,

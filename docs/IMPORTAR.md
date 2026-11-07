@@ -19,7 +19,7 @@ Antes de gravar, o app mostra uma **prévia** (o que vai criar, atualizar, aviso
 | `nomes` | Como capítulos e partes são chamados ("Primeiro Círculo", "Parte um") e se a numeração recomeça a cada parte. |
 | `fichas` | Personagens, lugares, objetos, grupos, divindades: apelidos, papel, grupo, notas, campos e relações. Um campo pode mudar ao longo do livro (`muda: [{ a_partir_de: capítulo, valor }]`). |
 | `capitulos` | Estrutura do livro na ordem: capítulos, prólogo, epílogo e partes; sinopse, ponto de vista, cenário, notas, epígrafe e, se quiser, o texto. |
-| `cartoes` | Cartões do quadro do Enredo: cenas, viradas, ideias, **fatos** (verdade do livro, com `revelar_em` e `termos`), **crenças** de um personagem e **fios soltos**. Entram como do autor (canônicos), arrumados em grade abaixo dos que já existem. |
+| `cartoes` | Cartões do quadro do Enredo: cenas, viradas, ideias, **fatos** (verdade do livro, com `revelar_em` e `termos`), **crenças** de um personagem e **fios soltos**. `imagem:` aponta para um arquivo que já está na pasta `assets/` do livro (só o nome, ex.: `rio.png`; png, jpg, jpeg ou webp); se o arquivo não existir, vira aviso e a imagem é ignorada. Entram como do autor (canônicos), arrumados em grade abaixo dos que já existem. |
 | `ligacoes` | Setas entre cartões (`causa` ou `relacao`). |
 | `manter` | Palavras e trechos que o Revisor nunca deve apontar. |
 | `paginas` | Dedicatória, epígrafe do livro, editora, cidade, ano, ISBN, agradecimentos, sobre o autor, posfácio e sinopse da contracapa. Texto preenchido liga a página. |

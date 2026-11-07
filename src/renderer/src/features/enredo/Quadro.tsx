@@ -27,6 +27,8 @@ import { CartaoNode, type CartaoNodeT } from './CartaoNode'
 export type Selecao = { tipo: 'cartao' | 'ligacao' | 'multi'; id: string } | null
 
 export interface QuadroProps {
+  /** pasta do livro (imagens dos cartões) */
+  dir: string
   board: EnredoBoard
   fichas: Map<string, Ficha>
   retratos: Record<string, string | null>
@@ -67,7 +69,7 @@ const ROTULOS_ARIA: Partial<AriaLabelConfig> = {
 }
 
 function QuadroInterno(props: QuadroProps): ReactElement {
-  const { board, fichas, retratos, chapters, sel, onSel } = props
+  const { dir, board, fichas, retratos, chapters, sel, onSel } = props
   const rf = useReactFlow()
   const caixa = useRef<HTMLDivElement>(null)
   const [filtro, setFiltro] = useState<Filtro>('todos')
@@ -92,12 +94,13 @@ function QuadroInterno(props: QuadroProps): ReactElement {
             cartao: c,
             cap: rotuloCapitulo(chapters, c.capitulo),
             fichas: ligadas,
-            retrato: ligadas[0] ? retratos[ligadas[0].id] : null
+            retrato: ligadas[0] ? retratos[ligadas[0].id] : null,
+            dir
           }
         }
       })
     })
-  }, [board.cartoes, fichas, retratos, chapters, filtro, sel])
+  }, [dir, board.cartoes, fichas, retratos, chapters, filtro, sel])
 
   // seleção vinda de fora (roteiro, mural, painel fechado)
   useEffect(() => {

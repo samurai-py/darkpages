@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useId, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactElement } from 'react'
 import type { Cartao, CartaoTipo, EnredoBoard, Ficha, Ligacao } from '../../../../shared/models'
 import type { ChapterInfo } from '../../../../shared/types'
 import { estadoFio } from '../../../../shared/narrativa'
@@ -6,6 +6,7 @@ import { TIPO_ROTULO, porNome } from '../universo/fichas'
 import { Mini } from '../universo/icons'
 import { CARTAO_ROTULO, CARTAO_TIPOS, LIGACAO_ROTULO, rotuloCapitulo, rotuloPorId } from './board'
 import { ESTADO_ROTULO } from './Selo'
+import { enviarImagemCartao, imagemDe, useImagemCartao } from './imagem'
 
 const EXPLICA_ESTADO: Record<Cartao['estado'], string> = {
   canonico: 'Faz parte do plano do livro: a IA trata como planejamento.',
@@ -14,6 +15,8 @@ const EXPLICA_ESTADO: Record<Cartao['estado'], string> = {
 }
 
 export interface CartaoPanelProps {
+  /** pasta do livro (imagens dos cartões em assets/) */
+  dir: string
   board: EnredoBoard
   cartaoId?: string
   ligacaoId?: string
@@ -21,6 +24,8 @@ export interface CartaoPanelProps {
   chapters: ChapterInfo[]
   focar: boolean
   onCartao: (c: Cartao) => void
+  /** troca (nome) ou tira (undefined) a imagem do cartão; quem chama apaga a antiga se ficou sem uso */
+  onImagem: (id: string, nome: string | undefined) => void
   /** muda o capítulo do cartão (vai para o fim do roteiro do capítulo) */
   onMoverPara: (id: string, capitulo: string) => void
   onLigacao: (l: Ligacao) => void
@@ -180,6 +185,8 @@ function PainelCartao(props: CartaoPanelProps & { c: Cartao }): ReactElement {
         />
       </label>
 
+      <SecaoImagem dir={props.dir} c={c} onImagem={props.onImagem} />
+
       {c.tipo === 'fato' && <SecaoFato c={c} fichas={ordenadas} chapters={chapters} set={set} />}
 
       <SecaoFio c={c} chapters={chapters} set={set} />
@@ -287,6 +294,124 @@ function PainelCartao(props: CartaoPanelProps & { c: Cartao }): ReactElement {
         )}
       </div>
     </aside>
+  )
+}
+
+/** Imagem do cartão: escolher arquivo, soltar ou colar; prévia, trocar e remover. */
+function SecaoImagem({
+  dir,
+  c,
+  onImagem
+}: {
+  dir: string
+  c: Cartao
+  onImagem: (id: string, nome: string | undefined) => void
+}): ReactElement {
+  const uid = useId()
+  const arquivo = useRef<HTMLInputElement>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [sobre, setSobre] = useState(false)
+  const url = useImagemCartao(dir, c.imagem)
+
+  useEffect(() => {
+    setErro('')
+    setSobre(false)
+  }, [c.id])
+
+  const enviar = async (file: File | null): Promise<void> => {
+    if (!file) {
+      setErro('Use uma imagem PNG, JPEG ou WebP.')
+      return
+    }
+    const id = c.id
+    setErro('')
+    setEnviando(true)
+    try {
+      onImagem(id, await enviarImagemCartao(dir, id, file))
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const temArquivos = (e: DragEvent): boolean => e.dataTransfer.types.includes('Files')
+  const onDragOver = (e: DragEvent): void => {
+    if (!temArquivos(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    setSobre(true)
+  }
+  const onDrop = (e: DragEvent): void => {
+    if (!temArquivos(e)) return
+    e.preventDefault()
+    setSobre(false)
+    void enviar(imagemDe(e.dataTransfer.files))
+  }
+  const onPaste = (e: ClipboardEvent): void => {
+    const f = imagemDe(e.clipboardData.files)
+    if (!f) return
+    e.preventDefault()
+    void enviar(f)
+  }
+
+  return (
+    <section className="en-sec" aria-labelledby={`${uid}-i`}>
+      <h3 className="en-eb" id={`${uid}-i`}>
+        <Mini name="imagem" size={14} /> Imagem
+      </h3>
+      <div
+        className={`en-img${sobre ? ' drop' : ''}${c.imagem ? ' tem' : ''}`}
+        tabIndex={0}
+        role="group"
+        aria-label={c.imagem ? 'Imagem do cartão. Solte ou cole outra para trocar.' : 'Sem imagem. Solte ou cole uma imagem aqui.'}
+        aria-busy={enviando}
+        onDragOver={onDragOver}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) setSobre(false)
+        }}
+        onDrop={onDrop}
+        onPaste={onPaste}
+      >
+        {c.imagem && url && <img src={url} alt={`Imagem do cartão ${c.titulo || ''}`.trim()} draggable={false} />}
+        {c.imagem && url === null && <span className="label">Arquivo “{c.imagem}” não encontrado em assets/.</span>}
+        {!c.imagem && (
+          <span className="en-img-vazio">
+            <Mini name="imagem" size={22} />
+            {enviando ? 'Enviando…' : 'Solte, cole (Ctrl+V) ou escolha uma imagem'}
+          </span>
+        )}
+        {c.imagem && enviando && <span className="en-img-msg">Enviando…</span>}
+      </div>
+      <div className="en-acts">
+        <button type="button" className="btn sm" disabled={enviando} onClick={() => arquivo.current?.click()}>
+          <Mini name="imagem" /> {c.imagem ? 'Trocar imagem' : 'Escolher imagem'}
+        </button>
+        {c.imagem && (
+          <button type="button" className="btn sm" disabled={enviando} onClick={() => onImagem(c.id, undefined)}>
+            <Mini name="lixo" /> Remover imagem
+          </button>
+        )}
+      </div>
+      <input
+        ref={arquivo}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null
+          e.target.value = ''
+          if (f) void enviar(imagemDe([f]))
+        }}
+      />
+      {erro && (
+        <p className="err" role="alert">
+          {erro}
+        </p>
+      )}
+      <p className="en-estado-txt">Fica em assets/ do livro. Só aparece no Enredo: a IA não vê imagens.</p>
+    </section>
   )
 }
 

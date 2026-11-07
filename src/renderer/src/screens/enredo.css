@@ -213,8 +213,9 @@
 .en-rn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .en-rbody {
   font: inherit; text-align: left; border: 0; background: transparent; color: var(--text); cursor: pointer; padding: 6px 4px;
-  display: flex; flex-direction: column; gap: 4px; min-width: 0; border-radius: 6px;
+  display: flex; align-items: center; gap: 12px; min-width: 0; border-radius: 6px;
 }
+.en-rcol { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .en-rt { font-size: 17px; }
 .en-rx { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .en-rmove { display: flex; gap: 2px; }
@@ -380,6 +381,38 @@
 .en-lt { font-size: 17px; }
 .en-lx { font-size: 13px; color: var(--muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .en-ldet summary { cursor: pointer; margin-bottom: 8px; }
+
+/* ---------- imagem do cartão ---------- */
+@keyframes enImg { from { opacity: 0; } to { opacity: 1; } }
+.en-thumb, .en-mthumb, .en-rthumb, .en-face-img { display: block; overflow: hidden; background: var(--desk); }
+.en-thumb img, .en-mthumb img, .en-rthumb img, .en-face-img img {
+  width: 100%; height: 100%; display: block; object-fit: cover; animation: enImg .3s var(--ease) both;
+}
+.en-thumb.carregando, .en-mthumb.carregando, .en-rthumb.carregando, .en-face-img.carregando { animation: enPulse 1.1s var(--ease) infinite alternate; }
+/* quadro: faixa no topo do cartão, sangrando até a borda */
+.en-card.com-img { padding-top: 0; }
+.en-thumb { height: 96px; margin: 0 -14px 4px; border-radius: calc(var(--rad) + 1px) calc(var(--rad) + 1px) 0 0; }
+.en-face > .en-face-img { width: 100%; height: 100%; }
+/* mural: faixa baixa no topo; roteiro: miniatura ao lado do título */
+.en-mthumb { height: 64px; margin: -10px -12px 2px; border-radius: calc(var(--rad) - 3px) calc(var(--rad) - 3px) 0 0; }
+.en-rthumb { width: 56px; height: 42px; flex: none; border-radius: 6px; box-shadow: 0 0 0 1px var(--line); }
+/* painel: prévia que também recebe arquivo solto ou colado */
+.en-img {
+  position: relative; min-height: 112px; display: grid; place-items: center; overflow: hidden;
+  border: 1px dashed var(--line); border-radius: calc(var(--rad) - 4px); background: var(--panel);
+  transition: border-color .2s var(--ease), background-color .2s var(--ease);
+}
+.en-img.tem { border-style: solid; background: var(--desk); }
+.en-img img { width: 100%; max-height: 240px; display: block; object-fit: contain; animation: enImg .3s var(--ease) both; }
+.en-img:hover { border-color: var(--muted); }
+.en-img:focus-visible { outline: none; border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.en-img.drop { border-color: var(--acc); border-style: dashed; background: color-mix(in srgb, var(--acc) 7%, var(--panel)); }
+.en-img .label { padding: 14px; text-align: center; }
+.en-img-vazio { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px; font-size: 13px; color: var(--muted); text-align: center; }
+.en-img-msg {
+  position: absolute; inset: auto 8px 8px auto; font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+  background: var(--bg); color: var(--text); box-shadow: 0 0 0 1px var(--line);
+}
 
 @media (max-width: 1100px) {
   .en-aside { width: 320px; }
