@@ -9,6 +9,9 @@ import { inserirCena } from './extensions'
 
 export const TRAVESSAO = '— '
 
+/** Evento no DOM do editor que pede o Corrigir; `detail` = escopo ('selecao' | 'paragrafo'). */
+export const EVENTO_CORRIGIR = 'folio:corrigir'
+
 /** Atalhos mostrados na interface (mesma fonte da verdade da extensão). */
 export const ATALHOS: Array<{ teclas: string; acao: string }> = [
   { teclas: '- ou -- no início + espaço', acao: 'Travessão de diálogo (— )' },
@@ -27,7 +30,8 @@ export const ATALHOS: Array<{ teclas: string; acao: string }> = [
   { teclas: 'Ctrl+V', acao: 'Cola só o texto, itálico e negrito, já com travessão e aspas curvas' },
   { teclas: 'Ctrl+Shift+V', acao: 'Cola como texto simples' },
   { teclas: 'Ctrl+Z / Ctrl+Shift+Z', acao: 'Desfazer / refazer' },
-  { teclas: 'Ctrl+F', acao: 'Buscar' }
+  { teclas: 'Ctrl+F', acao: 'Buscar' },
+  { teclas: 'Ctrl+Alt+F', acao: 'Corrigir a seleção (ou o parágrafo): tipografia, espaços, ortografia e gramática' }
 ]
 
 const LINHA_DE_CENA = /^\s*([-*_])(?:\s*\1){2,}\s*$/
@@ -268,7 +272,13 @@ export const EscritaLiteraria = Extension.create({
   addKeyboardShortcuts() {
     return {
       'Mod-Enter': () => novaFala(this.editor),
-      'Mod-Shift-Enter': () => inserirCena(this.editor)
+      'Mod-Shift-Enter': () => inserirCena(this.editor),
+      // Corrigir: o Manuscrito abre a prévia (seleção, se houver; senão o parágrafo)
+      'Mod-Alt-f': () => {
+        const escopo = this.editor.state.selection.empty ? 'paragrafo' : 'selecao'
+        this.editor.view.dom.dispatchEvent(new CustomEvent(EVENTO_CORRIGIR, { detail: escopo, bubbles: true }))
+        return true
+      }
     }
   }
 })

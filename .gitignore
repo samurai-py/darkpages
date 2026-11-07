@@ -8,3 +8,5 @@ resources/bin/
 spike-output/
 # fontes baixadas por npm run fetch:fonts
 resources/fonts/*/
+# dicionário de sinônimos baixado por npm run fetch:tesauro (licenças junto)
+resources/thesaurus/

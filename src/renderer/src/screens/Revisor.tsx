@@ -269,7 +269,8 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
   }, [sugs, lista])
   const resolvidas = lista.filter((s) => estados[s.id] === 'aceita' || estados[s.id] === 'ignorada').length
   const visiveis = filtro === 'todas' ? lista : lista.filter((s) => s.categoria === filtro)
-  const ortoPendentes = lista.filter((s) => s.categoria === 'ortografia' && (estados[s.id] ?? 'pendente') === 'pendente')
+  // ortografia e gramática (LanguageTool): aceitar em lote, com versão guardada antes (ia.aplicar)
+  const ltPendentes = lista.filter((s) => (s.categoria === 'ortografia' || s.categoria === 'gramatica') && !s.soAviso && (estados[s.id] ?? 'pendente') === 'pendente')
   const idx = chapters.findIndex((c) => c.file === file)
   const cap = chapters[idx]
 
@@ -390,8 +391,14 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
             </span>
           )}
           <span className="rv-acts">
-            <button type="button" className="btn" disabled={!ortoPendentes.length || revisando} onClick={() => void aceitar(ortoPendentes)}>
-              <Ico n="check" /> Aceitar toda ortografia
+            <button
+              type="button"
+              className="btn"
+              disabled={!ltPendentes.length || revisando}
+              title="Aplica de uma vez as sugestões pendentes de ortografia e gramática. Antes, uma versão do capítulo fica guardada em Versões."
+              onClick={() => void aceitar(ltPendentes)}
+            >
+              <Ico n="check" /> Aceitar ortografia e gramática{ltPendentes.length ? ` (${ltPendentes.length})` : ''}
             </button>
             <button type="button" className="btn pri" disabled={revisando} onClick={() => void revisar()}>
               <Ico n="refazer" /> {revisando ? 'Revisando…' : sugs ? 'Revisar de novo' : 'Revisar capítulo'}

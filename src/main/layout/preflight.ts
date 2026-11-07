@@ -3,6 +3,7 @@ import { spineWidthMm } from '../../shared/types'
 import { aberturaPath, capaFrentePath, coverDpi, imageSize, widthDpi } from './assets'
 import { isbnToEan } from './cover'
 import { prepareBook, rememberPageCount } from './export'
+import { calibrarPaginas } from './calibracao'
 import { assetName, parseBody } from './markdown'
 import { chapterOpening, resolveLayout } from './settings'
 import { compileTypst } from './typst'
@@ -41,6 +42,7 @@ export async function preflight(dir: string, resourcesDir: string): Promise<Item
     })
     pages = r.pages
     await rememberPageCount(dir, pages, b.fingerprint)
+    await calibrarPaginas(b, pages).catch(() => null)
     const missing = new Set<string>()
     const other: string[] = []
     for (const m of r.warnings.matchAll(/warning: (.+)/g)) {

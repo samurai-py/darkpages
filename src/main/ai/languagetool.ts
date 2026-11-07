@@ -144,7 +144,7 @@ export async function checarLanguageTool(ctx: Ctx, corpo: string, dicionario?: S
       throw new Error(
         publico
           ? err.message
-          : `${err.message}\nInicie seu servidor LanguageTool (ex.: docker run -p 8081:8010 erikvl87/languagetool) ou desligue-o em Ajustes → Revisor.`
+          : `${err.message}\nInicie seu servidor LanguageTool (ex.: scripts/languagetool-local.sh, ou docker run -p 127.0.0.1:8081:8010 erikvl87/languagetool) ou desligue-o em Ajustes → Revisor.`
       )
     }
     if (res.status === 429) throw new Error('O LanguageTool público limitou os pedidos (429). Espere um minuto ou use um servidor próprio.')
@@ -182,4 +182,45 @@ export async function checarLanguageTool(ctx: Ctx, corpo: string, dicionario?: S
     }
   }
   return out
+}
+
+export interface TesteLt {
+  url: string
+  /** versão do LanguageTool (campo software.version da resposta) */
+  versao: string
+  /** tempo da checagem de teste, em ms */
+  ms: number
+  /** problemas achados na frase de teste (espera-se ≥ 1) */
+  achados: number
+}
+
+/** Frase de teste com um erro de concordância conhecido. */
+const FRASE_TESTE = 'Os menino foi para a escola ontem.'
+
+/**
+ * "Testar conexão" de Ajustes → Revisor: checa uma frase pt-BR no servidor e
+ * devolve versão e latência. `url` (o que está digitado, ainda não salvo)
+ * passa pela mesma validação de URL local; sem `url`, usa o que está salvo.
+ */
+export async function testarLanguageTool(ctx: Ctx, url?: string): Promise<TesteLt> {
+  const s = await revisorSettings(ctx)
+  const base = url !== undefined ? normalizarLt(validarUrlLocal(url, 'LanguageTool')) : ltBase(s)
+  if (!base) throw new Error('O LanguageTool está desligado em Ajustes → Revisor.')
+  const t0 = Date.now()
+  let res: Response
+  try {
+    res = await fetch(`${base}/v2/check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+      body: new URLSearchParams({ text: FRASE_TESTE, language: 'pt-BR' }).toString(),
+      redirect: 'error',
+      signal: AbortSignal.timeout(20_000)
+    })
+  } catch (e) {
+    throw erroDeRede(e, 'O LanguageTool', base, 20_000)
+  }
+  const ms = Date.now() - t0
+  if (!res.ok) throw new Error(`O LanguageTool respondeu ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const j = (await res.json()) as { software?: { name?: string; version?: string }; matches?: unknown[] }
+  return { url: base, versao: String(j.software?.version ?? '?').slice(0, 40), ms, achados: Array.isArray(j.matches) ? j.matches.length : 0 }
 }

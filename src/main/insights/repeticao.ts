@@ -1,10 +1,12 @@
 import { contexto, mascararMarkdown, semAcento } from '../ai/texto'
 import type { Sugestao } from '../../shared/models'
+import { familias, radical } from '../../shared/stemmer-pt'
 
 /**
  * Repetição próxima (local, determinística, sem IA): a mesma palavra de 5+
- * letras, fora das palavras comuns e de nomes próprios, duas ou mais vezes
- * dentro de uma janela de N palavras. Puro: usado pelo modo proativo e
+ * letras — ou outra da mesma família ("sombra", "sombras", "sombrio"; radical
+ * Snowball, ver shared/stemmer-pt.ts) —, fora das palavras comuns e de nomes
+ * próprios, duas ou mais vezes dentro de uma janela de N palavras. Puro: usado pelo modo proativo e
  * reaproveitável pelo Revisor.
  */
 
@@ -23,7 +25,7 @@ export interface Ocorrencia {
 
 /** Um grupo de repetições: ocorrências seguidas da mesma palavra, cada uma a até `janela` palavras da anterior. */
 export interface GrupoRepeticao {
-  /** forma comparada (minúscula, sem acento) */
+  /** radical da família comparada (minúsculo, sem acento) */
   chave: string
   /** a primeira ocorrência, como escrita */
   palavra: string
@@ -46,12 +48,16 @@ export function gruposRepeticao(md: string, janela = 30, minLetras = 5): GrupoRe
     pos: m.index ?? 0,
     orig: md.slice(m.index ?? 0, (m.index ?? 0) + m[0].length)
   }))
+  const conta = (p: { w: string; orig: string }): boolean => p.w.length >= minLetras && !PALAVRAS_COMUNS.has(p.w) && !/^\p{Lu}/u.test(p.orig)
+  const radicais = palavras.map((p) => (conta(p) ? radical(p.w) : ''))
+  const fam = familias(radicais.filter(Boolean))
   const abertos = new Map<string, { ultimo: number; grupo: GrupoRepeticao }>()
   const out: GrupoRepeticao[] = []
   palavras.forEach((p, i) => {
-    if (p.w.length < minLetras || PALAVRAS_COMUNS.has(p.w) || /^\p{Lu}/u.test(p.orig)) return
+    if (!conta(p)) return
+    const chave = fam.get(radicais[i]!) ?? radicais[i]!
     const oc: Ocorrencia = { pos: p.pos, texto: p.orig }
-    const aberto = abertos.get(p.w)
+    const aberto = abertos.get(chave)
     if (aberto && i - aberto.ultimo <= janela) {
       aberto.grupo.ocorrencias.push(oc)
       aberto.grupo.fim = p.pos + p.orig.length
@@ -59,8 +65,8 @@ export function gruposRepeticao(md: string, janela = 30, minLetras = 5): GrupoRe
       return
     }
     // começa uma cadeia nova (a anterior, se tinha 2+, já está em `out`)
-    const grupo: GrupoRepeticao = { chave: p.w, palavra: p.orig, ocorrencias: [oc], inicio: p.pos, fim: p.pos + p.orig.length }
-    abertos.set(p.w, { ultimo: i, grupo })
+    const grupo: GrupoRepeticao = { chave, palavra: p.orig, ocorrencias: [oc], inicio: p.pos, fim: p.pos + p.orig.length }
+    abertos.set(chave, { ultimo: i, grupo })
     out.push(grupo)
   })
   return out.filter((g) => g.ocorrencias.length >= 2).sort((a, b) => a.inicio - b.inicio)

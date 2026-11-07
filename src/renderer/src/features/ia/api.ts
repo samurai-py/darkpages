@@ -93,6 +93,14 @@ export interface RevisorSettings {
   ltUrl?: string
 }
 
+/** Resultado do "Testar conexão" do LanguageTool */
+export interface TesteLt {
+  url: string
+  versao: string
+  ms: number
+  achados: number
+}
+
 export const ia = {
   status: () => call<StatusIa>('ia.status'),
   testar: () => call<TesteIa>('ia.testar'),
@@ -107,7 +115,10 @@ export const ia = {
     call<{ texto: string; avisos?: string[] }>('ia.redigir', dir, file, ideia, contexto, instrucao ?? ''),
   salvarRevisor: (patch: RevisorSettings) => call<RevisorSettings>('ia.salvarAjustes', 'revisor', patch),
   ideias: (dir: string, file: string, pedido?: string) => call<IdeiasResult>('ia.ideias', dir, file, pedido ?? ''),
-  sinonimos: (palavra: string, frase: string) => call<SinonimosResult>('ia.sinonimos', palavra, frase),
+  /** modo 'auto': dicionário offline primeiro; 'ia': sugestões pela IA com o contexto da frase */
+  sinonimos: (palavra: string, frase: string, modo: 'auto' | 'ia' = 'auto') => call<SinonimosResult>('ia.sinonimos', palavra, frase, modo),
+  /** url: a digitada (ainda não salva); vazio usa a salva */
+  testarLanguageTool: (url?: string) => call<TesteLt>('ia.testarLanguageTool', url ?? ''),
   continuidade: (dir: string, file: string) => call<Conflito[]>('ia.continuidade', dir, file),
   beta: (dir: string, file: string) => call<BetaLeitura>('ia.beta', dir, file),
   betaGet: (dir: string, file: string) => call<BetaLeitura | null>('ia.betaGet', dir, file),

@@ -18,11 +18,15 @@ import { Toolbar, mmss, type Visual } from '../features/manuscrito/Toolbar'
 import { Inspector } from '../features/manuscrito/Inspector'
 import { Exportar, Importar } from '../features/manuscrito/ImportExport'
 import { Ico } from '../features/manuscrito/icones'
-import { fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '../features/manuscrito/texto'
+import { dataCurta, fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '../features/manuscrito/texto'
 import type { Furo } from '../features/manuscrito/extensions'
 import { NomeCapitulos } from '../features/manuscrito/NomeCapitulos'
 import { Versoes } from '../features/versoes/Versoes'
+import { Corrigir } from '../features/manuscrito/Corrigir'
+import type { EscopoCorrecao } from '../features/manuscrito/corrigir'
+import { EVENTO_CORRIGIR } from '../features/manuscrito/escrita'
 import { resolveNumeracao } from '../../../shared/rotulo'
+import type { EstimativaCalibrada } from '../../../shared/paginas'
 import { SyncStatus } from '../features/sync/SyncStatus'
 import { SpotifyPlayer } from '../features/spotify/Player'
 import './manuscrito.css'
@@ -155,6 +159,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const [erroCont, setErroCont] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modal, setModal] = useState<'importar' | 'exportar' | 'rotulo' | 'versoes' | 'lixeira' | null>(null)
+  /** prévia do Corrigir aberta (escopo) */
+  const [corrigindo, setCorrigindo] = useState<EscopoCorrecao | null>(null)
 
   const root = useRef<HTMLDivElement>(null)
   const bodyRef = useRef('')
@@ -301,6 +307,20 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
       setTextoLento(t)
     }
   }, [])
+
+  // Ctrl+Alt+F no editor (escrita.ts) abre a prévia do Corrigir
+  useEffect(() => {
+    // outro capítulo (ou editor remontado): a prévia aberta valia para o texto anterior
+    setCorrigindo(null)
+    if (!editor) return
+    const dom = editor.view.dom
+    const abrir = (ev: Event): void => {
+      const d = (ev as CustomEvent<EscopoCorrecao>).detail
+      setCorrigindo(d === 'selecao' ? 'selecao' : 'paragrafo')
+    }
+    dom.addEventListener(EVENTO_CORRIGIR, abrir)
+    return () => dom.removeEventListener(EVENTO_CORRIGIR, abrir)
+  }, [editor])
 
   /** gatilho "pausa" do modo proativo: N s sem digitar, depois de salvar */
   const agendarPausa = (): void => {
@@ -658,14 +678,38 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // calibração da estimativa de páginas (gravada pela Diagramação ao compilar)
+  const [estimativa, setEstimativa] = useState<EstimativaCalibrada | null>(null)
+  useEffect(() => {
+    let vivo = true
+    call<EstimativaCalibrada>('diagramacao.calibracao', dir).then(
+      (e) => vivo && setEstimativa(e),
+      () => vivo && setEstimativa(null)
+    )
+    return () => {
+      vivo = false
+    }
+  }, [dir, project.meta.layout])
+
   // ------------------------------------------------------------ números
 
   const layout = project.meta.layout
   const palavrasCap = countWords(texto)
   const palavrasDe = (file: string, w: number): number => (file === current && editor ? palavrasCap : w)
   const totalLivro = project.chapters.reduce((s, c) => s + palavrasDe(c.file, c.words), 0)
-  const paginasLivro = project.chapters.reduce((s, c) => s + paginasCapitulo(palavrasDe(c.file, c.words), layout), 0)
-  const paginasCap = paginasCapitulo(palavrasCap, layout)
+  // palavras/página calibradas pela última diagramação neste layout (senão, a fórmula)
+  const cal = estimativa?.calibracao ?? null
+  const ppp = cal?.palavrasPorPagina ?? null
+  const paginasLivro = project.chapters.reduce((s, c) => s + paginasCapitulo(palavrasDe(c.file, c.words), layout, ppp), 0) + (cal?.preliminares ?? 0)
+  const paginasCap = paginasCapitulo(palavrasCap, layout, ppp)
+  const dicaPaginas = [
+    cal
+      ? `Estimativa calibrada pela última diagramação em ${dataCurta(cal.em)} (${fmt(Math.round(cal.palavrasPorPagina))} palavras por página${cal.preliminares ? `, ${cal.preliminares} páginas preliminares` : ''}).`
+      : 'Estimativa pelo formato, corpo e entrelinha da Diagramação. Diagrame o livro (prévia ou PDF) para calibrar.',
+    estimativa?.paginasReais ? `Páginas reais: ${fmt(estimativa.paginasReais)} (última diagramação${estimativa.paginasReaisEm ? `, ${dataCurta(estimativa.paginasReaisEm)}` : ''}).` : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
   const st = estadoSalvo(corpo.state, meta.state)
   const presentes = useMemo(() => fichasNoTexto(`${title}\n${textoLento}`, fichas), [textoLento, title, fichas])
   const rotuloCfg = resolveNumeracao(project.meta.layout)
@@ -717,6 +761,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
             restante={restante}
             onAmpulheta={alternarAmpulheta}
             onVersoes={() => setModal('versoes')}
+            onCorrigir={setCorrigindo}
           />
         )}
 
@@ -838,7 +883,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           <span>
             <b>{fmt(totalLivro)}</b> no livro
           </span>
-          <span title="Estimativa pelo formato, corpo e entrelinha da Diagramação">
+          <span title={dicaPaginas}>
             ≈ {fmt(paginasCap)} p. · {fmt(paginasLivro)} páginas · {formatoCm(layout)}
           </span>
           <span>{tempoLeitura(palavrasCap)}</span>
@@ -914,6 +959,20 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
             setModal(null)
             void switchTo(arquivo)
             toast({ id: 'recuperado', tipo: 'info', titulo: 'Capítulo recuperado', texto: `“${titulo}” voltou para o fim do livro.` })
+          }}
+        />
+      )}
+      {corrigindo && editor && current && (
+        <Corrigir
+          editor={editor}
+          dir={dir}
+          file={current}
+          escopo={corrigindo}
+          antes={flushAll}
+          onFechar={() => setCorrigindo(null)}
+          onAplicado={(n) => {
+            setCorrigindo(null)
+            toast({ id: 'corrigir', tipo: 'info', titulo: `${n} ${n === 1 ? 'correção aplicada' : 'correções aplicadas'}`, texto: 'Ctrl+Z desfaz tudo de uma vez.' })
           }}
         />
       )}

@@ -200,6 +200,13 @@
 .ms-pop-msg { margin: 0; font-size: 12px; color: var(--muted); }
 .ms-chips { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--fb); }
 .ms-chips .ms-chip { font-family: var(--fb); font-size: 14px; }
+.ms-pop-ia { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+.ms-sentidos { font-size: 12px; color: var(--muted); max-height: 220px; overflow: auto; }
+.ms-sentidos summary { cursor: pointer; padding: 2px 0; }
+.ms-sentidos summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; border-radius: var(--rad); }
+.ms-sentido { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; }
+.ms-sentido-t { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.ms-sentido .ms-chip { font-size: 13px; }
 .ms-area { min-height: 76px; padding: 8px 10px; resize: vertical; font-family: var(--fb); font-size: 15px; line-height: 1.4; }
 
 /* player e avisos */

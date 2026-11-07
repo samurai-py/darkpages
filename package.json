@@ -14,7 +14,9 @@
     "web": "electron-vite build && tsx src/server/index.ts",
     "web:tailscale": "electron-vite build && FOLIO_HOST=$(tailscale ip -4 | head -1) tsx src/server/index.ts",
     "fetch:fonts": "node scripts/fetch-fonts.mjs",
-    "setup": "npm run fetch:typst && npm run fetch:fonts",
+    "fetch:tesauro": "node scripts/fetch-thesaurus.mjs",
+    "languagetool": "bash scripts/languagetool-local.sh",
+    "setup": "npm run fetch:typst && npm run fetch:fonts && npm run fetch:tesauro",
     "test": "vitest run",
     "test:watch": "vitest"
   },

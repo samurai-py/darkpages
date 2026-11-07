@@ -1,5 +1,6 @@
 import type { Ficha } from '../../../../shared/models'
 import type { LayoutSettings } from '../../../../shared/types'
+import { familias, radical } from '../../../../shared/stemmer-pt'
 
 /** Minúsculas e sem acento, preservando o comprimento (1 caractere → 1 caractere). */
 export function foldChar(c: string): string {
@@ -36,23 +37,8 @@ const STOP = new Set(
   ).split(' ')
 )
 
-const SUFIXOS = [
-  'aríamos', 'eríamos', 'iríamos', 'ássemos', 'êssemos', 'íssemos', 'ariamos', 'eriamos', 'iriamos', 'assemos', 'essemos', 'issemos',
-  'ávamos', 'avamos', 'íamos', 'iamos', 'aremos', 'eremos', 'iremos', 'aram', 'eram', 'iram', 'avam', 'iam', 'ando', 'endo', 'indo',
-  'adas', 'ados', 'idas', 'idos', 'aria', 'eria', 'iria', 'asse', 'esse', 'isse', 'ará', 'erá', 'irá', 'ara', 'era', 'ira', 'ava',
-  'ada', 'ado', 'ida', 'ido', 'mente', 'ões', 'oes', 'ães', 'aes', 'ais', 'eis', 'ou', 'eu', 'iu', 'ar', 'er', 'ir', 'am', 'em',
-  'es', 'as', 'os', 'a', 'e', 'o', 's'
-].map(fold)
-
-/** Radical aproximado em PT: sem acento, minúsculo, sem terminações verbais/plurais comuns. */
-export function radical(word: string): string {
-  const w = fold(word).replace(/['’-]/g, '')
-  if (w.length <= 4) return w
-  for (const s of SUFIXOS) {
-    if (w.endsWith(s) && w.length - s.length >= 3) return w.slice(0, -s.length)
-  }
-  return w
-}
+/** Radical para agrupar repetições: Snowball PT + ajustes (ver shared/stemmer-pt.ts). */
+export { radical }
 
 export function isStopword(word: string): boolean {
   const f = fold(word)
@@ -60,24 +46,33 @@ export function isStopword(word: string): boolean {
 }
 
 export interface Repeticao {
+  /** chave da família (radical) */
   raiz: string
+  /** radicais que caem nesta família (ex.: "sombr" e "sombri"); o realce do editor compara com eles */
+  radicais: string[]
   total: number
   /** formas encontradas → contagem */
   formas: Record<string, number>
 }
 
-/** Conta radicais no texto e devolve os mais repetidos (≥ `minimo`, até `limite`). */
+/** Palavras do texto (fora as comuns) com a chave de família de cada uma. */
+function palavrasComFamilia(texto: string): Array<{ w: string; r: string; k: string }> {
+  const ps = [...texto.matchAll(WORD_RE)].map((m) => m[0]).filter((w) => !isStopword(w))
+  const rs = ps.map(radical)
+  const f = familias(rs)
+  return ps.map((w, i) => ({ w, r: rs[i]!, k: f.get(rs[i]!) ?? rs[i]! }))
+}
+
+/** Conta famílias de palavras no texto e devolve as mais repetidas (≥ `minimo`, até `limite`). */
 export function analisarRepeticoes(texto: string, limite = 12, minimo = 3): Repeticao[] {
   const mapa = new Map<string, Repeticao>()
-  for (const m of texto.matchAll(WORD_RE)) {
-    const w = m[0]
-    if (isStopword(w)) continue
-    const r = radical(w)
-    let e = mapa.get(r)
+  for (const { w, r, k } of palavrasComFamilia(texto)) {
+    let e = mapa.get(k)
     if (!e) {
-      e = { raiz: r, total: 0, formas: {} }
-      mapa.set(r, e)
+      e = { raiz: k, radicais: [], total: 0, formas: {} }
+      mapa.set(k, e)
     }
+    if (!e.radicais.includes(r)) e.radicais.push(r)
     e.total++
     const forma = w.toLowerCase()
     e.formas[forma] = (e.formas[forma] ?? 0) + 1
@@ -88,16 +83,22 @@ export function analisarRepeticoes(texto: string, limite = 12, minimo = 3): Repe
     .slice(0, limite)
 }
 
-/** Contagem do radical de uma palavra num texto (para o popup). */
+/** Contagem da família de uma palavra num texto (para o popup). */
 export function contarRadical(texto: string, palavra: string): Repeticao {
-  const raiz = radical(palavra)
-  const e: Repeticao = { raiz, total: 0, formas: {} }
-  for (const m of texto.matchAll(WORD_RE)) {
-    if (radical(m[0]) !== raiz) continue
+  const ps = [...texto.matchAll(WORD_RE)].map((m) => m[0])
+  const rs = ps.map(radical)
+  const rAlvo = radical(palavra)
+  const f = familias([...rs, rAlvo])
+  const raiz = f.get(rAlvo) ?? rAlvo
+  const e: Repeticao = { raiz, radicais: [], total: 0, formas: {} }
+  ps.forEach((w, i) => {
+    const r = rs[i]!
+    if ((f.get(r) ?? r) !== raiz) return
+    if (!e.radicais.includes(r)) e.radicais.push(r)
     e.total++
-    const f = m[0].toLowerCase()
-    e.formas[f] = (e.formas[f] ?? 0) + 1
-  }
+    const fw = w.toLowerCase()
+    e.formas[fw] = (e.formas[fw] ?? 0) + 1
+  })
   return e
 }
 
@@ -121,24 +122,8 @@ export function fichasNoTexto(texto: string, fichas: Ficha[]): Array<{ ficha: Fi
 
 // ------------------------------------------------------------------ páginas
 
-const PT_MM = 25.4 / 72
-
-/** Palavras por página no formato/corpo/entrelinha da diagramação (estimativa). */
-export function palavrasPorPagina(l: LayoutSettings): number {
-  const largura = l.trim.widthMm - l.margins.insideMm - l.margins.outsideMm
-  const altura = l.trim.heightMm - l.margins.topMm - l.margins.bottomMm
-  const linhaMm = l.bodyPt * l.lineHeight * PT_MM
-  const linhas = Math.max(1, Math.floor(altura / linhaMm))
-  // largura média de caractere numa serifada de livro ≈ 0,46 em
-  const charsPorLinha = largura / (l.bodyPt * PT_MM * 0.46)
-  // palavra média em PT ≈ 4,9 letras + espaço; ~8% de perda em fins de parágrafo
-  return Math.max(50, linhas * (charsPorLinha / 5.9) * 0.92)
-}
-
-/** Páginas de um capítulo: abre em página nova e perde ~1/3 de página no rebaixo do título. */
-export function paginasCapitulo(palavras: number, l: LayoutSettings): number {
-  return Math.max(1, Math.ceil(palavras / palavrasPorPagina(l) + 0.35))
-}
+// estimativa e calibração ficam em shared/paginas.ts (o processo principal calibra após diagramar)
+export { palavrasPorPagina, paginasCapitulo } from '../../../../shared/paginas'
 
 export function formatoCm(l: LayoutSettings): string {
   const cm = (mm: number): string => (Math.round(mm) % 10 === 0 ? String(mm / 10) : (mm / 10).toLocaleString('pt-BR', { maximumFractionDigits: 1 }))
@@ -151,6 +136,12 @@ export function tempoLeitura(palavras: number): string {
   const h = Math.floor(min / 60)
   const m = min % 60
   return `${h} h${m ? ` ${m} min` : ''} de leitura`
+}
+
+/** "7 de nov. de 2026" a partir de ISO 8601 (vazio se inválida). */
+export function dataCurta(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export function fmt(n: number): string {

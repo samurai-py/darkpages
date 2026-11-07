@@ -6,6 +6,7 @@ import { exportEpub } from '../layout/epub'
 import { listFonts } from '../layout/fonts'
 import { preflight } from '../layout/preflight'
 import { previewPages } from '../layout/preview'
+import { estimativaCalibrada } from '../layout/calibracao'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -55,6 +56,9 @@ export const handlers: Handlers = {
 
   /** (dir) → lista {nivel: ok|aviso|erro, texto} */
   'diagramacao.checar': async (ctx, dir) => preflight(await bookDir(ctx, dir), ctx.resourcesDir),
+
+  /** (dir) → EstimativaCalibrada: palavras/página da última diagramação neste layout + páginas reais (barra de status do Manuscrito) */
+  'diagramacao.calibracao': async (ctx, dir) => estimativaCalibrada(await bookDir(ctx, dir)),
 
   /** () → fontes que o Typst enxerga */
   'diagramacao.fontes': async (ctx) => listFonts(ctx.resourcesDir)

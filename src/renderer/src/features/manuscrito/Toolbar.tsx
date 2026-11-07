@@ -5,6 +5,7 @@ import type { Editor } from '@tiptap/react'
 import { inserirCena, inserirFigura, inserirQuebraPagina, marcasKey } from './extensions'
 import { fileToDataUrl, folio } from '../../api'
 import { Ico } from './icones'
+import type { EscopoCorrecao } from './corrigir'
 
 export interface Visual {
   corpoPx: number
@@ -30,6 +31,8 @@ interface Props {
   onAmpulheta: () => void
   /** abre o painel de Versões do capítulo */
   onVersoes?: () => void
+  /** abre a prévia do Corrigir no escopo escolhido */
+  onCorrigir?: (escopo: EscopoCorrecao) => void
 }
 
 /** Re-renderiza quando o editor muda (seleção, marcas, decorações). */
@@ -96,6 +99,13 @@ export function Toolbar(p: Props): ReactElement {
     inserirRef.current?.removeAttribute('open')
     fn()
   }
+
+  const corrigirRef = useRef<HTMLDetailsElement>(null)
+  const corrigir = (escopo: EscopoCorrecao): void => {
+    corrigirRef.current?.removeAttribute('open')
+    p.onCorrigir?.(escopo)
+  }
+  const temSelecao = !!e && !e.state.selection.empty
 
   const inserirNota = (): void => {
     if (!e) return
@@ -210,6 +220,29 @@ export function Toolbar(p: Props): ReactElement {
             <Ico n="eco" size={14} />
             Repetições
           </button>
+          {p.onCorrigir && (
+            <details className="ms-atalhos ms-ins ms-corr" ref={corrigirRef}>
+              <summary className="ms-chip ms-lbl1" title="Corrigir tipografia, espaços, ortografia e gramática, com prévia (Ctrl+Alt+F)">
+                <Ico n="corrigir" size={14} />
+                Corrigir
+                <Ico n="descer" size={12} />
+              </summary>
+              <div className="ms-atalhos-pop ms-ins-pop" role="menu" aria-label="Corrigir">
+                <button type="button" role="menuitem" className="ms-mi" disabled={!temSelecao} onClick={() => corrigir('selecao')}>
+                  <Ico n="selecao" size={15} />
+                  <span><b>Seleção</b><small>{temSelecao ? 'Só o trecho selecionado · Ctrl+Alt+F' : 'Selecione um trecho primeiro'}</small></span>
+                </button>
+                <button type="button" role="menuitem" className="ms-mi" disabled={!e} onClick={() => corrigir('paragrafo')}>
+                  <Ico n="paragrafo" size={15} />
+                  <span><b>Parágrafo atual</b><small>Onde está o cursor · Ctrl+Alt+F sem seleção</small></span>
+                </button>
+                <button type="button" role="menuitem" className="ms-mi" disabled={!e} onClick={() => corrigir('capitulo')}>
+                  <Ico n="pagina" size={15} />
+                  <span><b>Capítulo inteiro</b><small>Guarda uma versão antes de aplicar</small></span>
+                </button>
+              </div>
+            </details>
+          )}
           {p.onVersoes && (
             <button type="button" className="ms-chip ms-lbl2" onClick={p.onVersoes} title="Versões guardadas deste capítulo: comparar e restaurar">
               <Ico n="versoes" size={14} />

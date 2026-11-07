@@ -1,4 +1,5 @@
 import type { Conflito, DecisaoRevisao, DecisaoTipo, Sugestao } from './models'
+import { radical } from './stemmer-pt'
 
 /**
  * Decisões de revisão ("Sempre manter" no Revisor, "Foi de propósito" no
@@ -67,6 +68,11 @@ export function sugestaoMantida(s: Sugestao, decisoes: DecisaoRevisao[], ignorad
   if (s.regra && ds.some((d) => d.tipo === 'ignorar-regra' && d.valor === s.regra)) return true
   const palavras = palavrasMantidas(ds)
   if (s.palavra && palavras.has(normalizar(s.palavra))) return true
+  // repetição agrupa a família ("sombra", "sombras"): manter uma forma mantém a família
+  if (s.categoria === 'repeticao' && s.palavra && palavras.size) {
+    const r = radical(s.palavra)
+    if ([...palavras].some((p) => !/\s/.test(p) && radical(p) === r)) return true
+  }
   if ((s.categoria === 'ortografia' || s.categoria === 'repeticao') && palavras.has(normalizar(s.original))) return true
   return trechoMantido(s.original, ds)
 }

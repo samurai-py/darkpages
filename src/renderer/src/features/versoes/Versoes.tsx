@@ -18,6 +18,7 @@ const MOTIVO: Record<MotivoSnapshot, { nome: string; cls: string }> = {
   'antes de importar': { nome: 'Antes de importar', cls: 'antes' },
   'antes de importar regras': { nome: 'Antes de importar regras e dados', cls: 'antes' },
   'antes de restaurar': { nome: 'Antes de restaurar', cls: 'antes' },
+  'antes de corrigir': { nome: 'Antes de corrigir', cls: 'antes' },
   manual: { nome: 'Salva por você', cls: 'manual' }
 }
 

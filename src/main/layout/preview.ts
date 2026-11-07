@@ -6,6 +6,7 @@ import { prepareBook, rememberPageCount, writeBookSource, type PreparedBook } fr
 import { resolveLayout } from './settings'
 import { SLUG_MM } from './typst-source'
 import { queryTypst, renderPng } from './typst'
+import { calibrarPaginas } from './calibracao'
 
 export interface BookMap {
   total: number
@@ -36,6 +37,12 @@ export interface PreviewResult {
 
 const PREVIEW_NAME = 'previa.typ'
 const MAX_PAGES = 8
+
+/** Página onde começa o primeiro capítulo (as anteriores são preliminares). */
+export function primeiraPagina(map: BookMap): number | undefined {
+  const ps = map.capitulos.map((c) => c.pagina).filter((p) => p > 0)
+  return ps.length ? Math.min(...ps) : undefined
+}
 
 /** Mapa do livro (total de páginas e página de cada capítulo) de um .typ já escrito. */
 export async function bookMap(b: PreparedBook, inputName: string): Promise<BookMap> {
@@ -76,6 +83,7 @@ export async function previewPages(dir: string, resourcesDir: string, inicio: nu
     )
     paginas.sort((a, c) => a.numero - c.numero)
     await rememberPageCount(dir, map.total, b.fingerprint)
+    await calibrarPaginas(b, map.total, primeiraPagina(map)).catch(() => null)
     const l = resolveLayout(b.project.meta.layout)
     const S = l.bleedMm + (l.cropMarks ? SLUG_MM : 0)
     const titles = new Map(b.chapters.map((c) => [c.file, c.title]))

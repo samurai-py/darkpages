@@ -73,6 +73,8 @@
 .aj-fb.erro { color: var(--alert); white-space: pre-wrap; }
 .aj-fb.info { color: var(--muted); }
 .aj-fb svg { flex: none; }
+.aj-lt-teste { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.aj-lt-teste .aj-fb { flex: 1 1 260px; align-items: flex-start; }
 
 @media (max-width: 900px) {
   .aj-nav { width: 200px; }

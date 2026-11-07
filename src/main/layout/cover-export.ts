@@ -6,7 +6,8 @@ import type { CoverSettings } from '../../shared/types'
 import { stageCapa } from './assets'
 import { buildCoverTypst, type CoverGeometry } from './cover'
 import { lastPageCount, prepareBook, rememberPageCount, writeBookSource } from './export'
-import { bookMap } from './preview'
+import { bookMap, primeiraPagina } from './preview'
+import { calibrarPaginas } from './calibracao'
 import { resolveLayout } from './settings'
 import { compileTypst, findTypst, renderPng } from './typst'
 
@@ -32,8 +33,10 @@ export async function mioloPages(dir: string, resourcesDir: string, fresh = fals
     if (last) return last
   }
   await writeBookSource(b, 'contagem.typ')
-  const { total } = await bookMap(b, 'contagem.typ')
+  const map = await bookMap(b, 'contagem.typ')
+  const total = map.total
   await rememberPageCount(dir, total, b.fingerprint)
+  await calibrarPaginas(b, total, primeiraPagina(map)).catch(() => null)
   return total
 }
 

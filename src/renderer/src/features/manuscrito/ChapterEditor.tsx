@@ -59,6 +59,8 @@ interface PopRep {
   sinonimos: SinonimosResult | null
   carregando: boolean
   erro: string | null
+  /** "Sugestões pelo contexto (IA)", pedidas pelo botão */
+  ia?: { r: SinonimosResult | null; carregando: boolean; erro: string | null }
 }
 
 interface PopNota {
@@ -117,7 +119,8 @@ export function ChapterEditor(p: Props): ReactElement {
     setNota(null)
     const pop: PopRep = { x, y, from, to, palavra, frase, info: contarRadical(textoTodo, palavra), sinonimos: null, carregando: true, erro: null }
     setRep(pop)
-    call<SinonimosResult>('ia.sinonimos', palavra, frase)
+    // dicionário offline primeiro (instantâneo); a IA só pelo botão do popup
+    call<SinonimosResult>('ia.sinonimos', palavra, frase, 'auto')
       .then((s) => setRep((r) => (r && r.from === from ? { ...r, sinonimos: s, carregando: false } : r)))
       .catch((e: unknown) =>
         setRep((r) => (r && r.from === from ? { ...r, carregando: false, erro: e instanceof Error ? e.message : String(e) } : r))
@@ -125,6 +128,17 @@ export function ChapterEditor(p: Props): ReactElement {
   }
   const abrirRepRef = useRef(abrirRep)
   abrirRepRef.current = abrirRep
+
+  const pedirIa = (): void => {
+    if (!rep) return
+    const { from, palavra, frase } = rep
+    setRep((r) => (r && r.from === from ? { ...r, ia: { r: null, carregando: true, erro: null } } : r))
+    call<SinonimosResult>('ia.sinonimos', palavra, frase, 'ia')
+      .then((s) => setRep((r) => (r && r.from === from ? { ...r, ia: { r: s, carregando: false, erro: null } } : r)))
+      .catch((e: unknown) =>
+        setRep((r) => (r && r.from === from ? { ...r, ia: { r: null, carregando: false, erro: e instanceof Error ? e.message : String(e) } } : r))
+      )
+  }
 
   const editor = useEditor({
     extensions: [
@@ -260,7 +274,7 @@ export function ChapterEditor(p: Props): ReactElement {
     if (!editor) return
     const t = setTimeout(
       () => {
-        const repetidas = p.repeticoes ? new Set(analisarRepeticoes(editor.getText()).map((r) => r.raiz)) : new Set<string>()
+        const repetidas = p.repeticoes ? new Set(analisarRepeticoes(editor.getText()).flatMap((r) => r.radicais)) : new Set<string>()
         const atual = marcasKey.getState(editor.state)?.repetidas
         if (atual && atual.size === repetidas.size && [...repetidas].every((r) => atual.has(r))) return
         editor.view.dispatch(editor.state.tr.setMeta(marcasKey, { repetidas }))
@@ -387,31 +401,21 @@ export function ChapterEditor(p: Props): ReactElement {
             Você usou formas de <b>“{rep.palavra.toLowerCase()}”</b> {fmt(rep.info.total)}× neste capítulo
             {formas.length > 1 && <span className="ms-formas">{formas.map(([f, n]) => `${f} ${n}×`).join(' · ')}</span>}
           </div>
-          {rep.carregando && <p className="ms-pop-msg">Buscando alternativas…</p>}
+          {rep.carregando && <p className="ms-pop-msg">Buscando sinônimos…</p>}
           {rep.erro && <p className="ms-pop-msg">Sinônimos indisponíveis: {rep.erro}</p>}
-          {rep.sinonimos && rep.sinonimos.sinonimos.length > 0 && (
-            <div className="ms-chips">
-              {rep.sinonimos.sinonimos.map((s) => (
-                <button key={s} type="button" className="ms-chip" onClick={() => trocar(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-          {rep.sinonimos && rep.sinonimos.fortes.length > 0 && (
+          {rep.sinonimos && <Alternativas s={rep.sinonimos} onTrocar={trocar} />}
+          {rep.sinonimos?.aviso && <p className="ms-pop-msg">{rep.sinonimos.aviso}</p>}
+          {rep.ia?.r && (
             <>
-              <div className="ms-eb ms-acc">Mais fortes</div>
-              <div className="ms-chips">
-                {rep.sinonimos.fortes.map((s) => (
-                  <button key={s} type="button" className="ms-chip" onClick={() => trocar(s)}>
-                    {s}
-                  </button>
-                ))}
-              </div>
+              <div className="ms-eb ms-acc">Pelo contexto (IA)</div>
+              <Alternativas s={rep.ia.r} onTrocar={trocar} />
             </>
           )}
-          {rep.sinonimos && rep.sinonimos.sinonimos.length === 0 && rep.sinonimos.fortes.length === 0 && (
-            <p className="ms-pop-msg">Nenhuma alternativa sugerida.</p>
+          {rep.ia?.erro && <p className="ms-pop-msg">IA indisponível: {rep.ia.erro}</p>}
+          {rep.sinonimos?.fonte === 'tesauro' && rep.sinonimos.iaDisponivel && !rep.ia?.r && (
+            <button type="button" className="btn sm ms-pop-ia" disabled={rep.ia?.carregando} onClick={pedirIa} title="Pede à IA sinônimos que caibam nesta frase, já flexionados">
+              <Ico n="brilho" size={13} /> {rep.ia?.carregando ? 'Perguntando à IA…' : 'Sugestões pelo contexto (IA)'}
+            </button>
           )}
         </div>
       )}
@@ -440,6 +444,60 @@ export function ChapterEditor(p: Props): ReactElement {
 
       {nota && <NotaPop key={nota.pos} nota={nota} onSalvar={salvarNota} onRemover={removerNota} onFechar={() => setNota(null)} />}
     </article>
+  )
+}
+
+/** Chips de sinônimos de um resultado (dicionário ou IA). */
+function Alternativas({ s, onTrocar }: { s: SinonimosResult; onTrocar: (w: string) => void }): ReactElement {
+  const sentidos = s.sentidos ?? []
+  const vazio = s.sinonimos.length === 0 && s.fortes.length === 0
+  return (
+    <>
+      {s.lema && (
+        <p className="ms-pop-msg">
+          Sinônimos de <b>“{s.lema}”</b>: ajuste a flexão depois de trocar.
+        </p>
+      )}
+      {s.sinonimos.length > 0 && (
+        <div className="ms-chips">
+          {s.sinonimos.slice(0, 8).map((w) => (
+            <button key={w} type="button" className="ms-chip" onClick={() => onTrocar(w)}>
+              {w}
+            </button>
+          ))}
+        </div>
+      )}
+      {s.fortes.length > 0 && (
+        <>
+          <div className="ms-eb ms-acc">Mais fortes</div>
+          <div className="ms-chips">
+            {s.fortes.map((w) => (
+              <button key={w} type="button" className="ms-chip" onClick={() => onTrocar(w)}>
+                {w}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {sentidos.length > 1 && (
+        <details className="ms-sentidos">
+          <summary>Por sentido ({sentidos.length})</summary>
+          {sentidos.slice(0, 8).map((se, i) => (
+            <div key={`${se.titulo}-${i}`} className="ms-sentido">
+              <span className="ms-sentido-t">{se.titulo}</span>
+              <div className="ms-chips">
+                {se.palavras.slice(0, 8).map((w) => (
+                  <button key={w} type="button" className="ms-chip" onClick={() => onTrocar(w)}>
+                    {w}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </details>
+      )}
+      {vazio && !s.aviso && <p className="ms-pop-msg">Nenhuma alternativa sugerida.</p>}
+    </>
   )
 }
 

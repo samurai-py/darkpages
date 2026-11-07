@@ -9,7 +9,7 @@ export type IconeMs =
   | 'mais' | 'menos' | 'busca' | 'ampulheta' | 'fechar' | 'subir' | 'descer' | 'menu' | 'arrastar'
   | 'importar' | 'exportar' | 'alerta' | 'lugar' | 'olho' | 'brilho' | 'nota' | 'cena' | 'lixeira'
   | 'lapis' | 'anterior' | 'proximo' | 'sair' | 'imagem' | 'eco' | 'versoes' | 'restaurar'
-  | 'pagina' | 'teclado' | 'texto' | 'inserir' | 'fala' | 'citacao'
+  | 'pagina' | 'teclado' | 'texto' | 'inserir' | 'fala' | 'citacao' | 'corrigir' | 'selecao' | 'paragrafo'
 
 const P: Record<IconeMs, ReactElement> = {
   mais: <path d="M12 5v14M5 12h14" />,
@@ -183,6 +183,26 @@ const P: Record<IconeMs, ReactElement> = {
     <>
       <path d="M5 6.5v11" style={{ stroke: 'var(--acc)' }} strokeWidth={2} />
       <path d="M9 8h10M9 12h10M9 16h7" />
+    </>
+  ),
+  corrigir: (
+    <>
+      <path d="M4 6.5h11M4 11.5h7M4 16.5h5" />
+      <path d="M12.5 15.2l2.9 2.9 5.1-6.4" style={{ stroke: 'var(--acc)' }} strokeWidth={2} />
+    </>
+  ),
+  selecao: (
+    <>
+      <rect x="5" y="8.5" width="14" height="7" rx="2" {...D} />
+      <path d="M5 5.5v13M19 5.5v13" />
+      <path d="M8.5 12h7" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  paragrafo: (
+    <>
+      <path d="M11 13H9.5a4 4 0 010-8H11z" {...D} />
+      <path d="M11 13H9.5a4 4 0 010-8H18M11 5v14M15 5v14" />
+      <circle cx="18.5" cy="18.5" r="1.1" {...A} />
     </>
   ),
   eco: (

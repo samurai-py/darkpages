@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { folio } from '../api'
-import { ia, type IaSettings, type LtModo, type ModeloCodex, type ModeloOllama, type Provedor, type RevisorSettings, type SugestaoModelo, type TesteIa } from '../features/ia/api'
+import { ia, type IaSettings, type LtModo, type ModeloCodex, type ModeloOllama, type Provedor, type RevisorSettings, type SugestaoModelo, type TesteIa, type TesteLt } from '../features/ia/api'
 import { Ico } from '../features/ia/icones'
 import { ArteSettingsPanel } from '../features/arte/SettingsPanel'
 import { SyncSettingsPanel } from '../features/sync/SettingsPanel'
@@ -467,6 +467,16 @@ function SecaoRevisor(): ReactElement {
   const [aceite, setAceite] = useState(false)
   const [fb, setFb] = useState<Feedback>(null)
   const [ocupado, setOcupado] = useState(false)
+  const [teste, setTeste] = useState<{ estado: 'testando' } | { estado: 'ok'; r: TesteLt } | { estado: 'erro'; msg: string } | null>(null)
+
+  const testarConexao = async (): Promise<void> => {
+    setTeste({ estado: 'testando' })
+    try {
+      setTeste({ estado: 'ok', r: await ia.testarLanguageTool(form.ltUrl) })
+    } catch (err) {
+      setTeste({ estado: 'erro', msg: (err as Error).message })
+    }
+  }
 
   useEffect(() => {
     folio.settings.get<RevisorSettings>('revisor').then(
@@ -531,17 +541,44 @@ function SecaoRevisor(): ReactElement {
             <input
               className="input"
               value={form.ltUrl}
-              onChange={(e) => setForm((f) => ({ ...f, ltUrl: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, ltUrl: e.target.value }))
+                setTeste(null)
+              }}
               spellCheck={false}
               autoComplete="off"
               inputMode="url"
+              placeholder="http://127.0.0.1:8081"
             />
           </label>
+          <div className="aj-lt-teste">
+            <button type="button" className="btn" disabled={teste?.estado === 'testando'} onClick={() => void testarConexao()}>
+              {teste?.estado === 'testando' ? 'Testando…' : 'Testar conexão'}
+            </button>
+            {teste?.estado === 'ok' && (
+              <p className="aj-fb ok" role="status">
+                <Ico n="check" size={15} />
+                <span>
+                  LanguageTool {teste.r.versao} respondeu em {teste.r.ms.toLocaleString('pt-BR')} ms
+                  {teste.r.achados > 0 ? ' e achou o erro da frase de teste.' : ', mas não achou o erro da frase de teste (o português está instalado?).'}
+                </span>
+              </p>
+            )}
+            {teste?.estado === 'erro' && (
+              <p className="aj-fb erro" role="alert">
+                <Ico n="alerta" size={15} />
+                <span>{teste.msg}</span>
+              </p>
+            )}
+          </div>
           <div className="aj-ram panel">
             <span className="aj-eb">Como subir o servidor</span>
-            <p>Com Docker instalado, um comando basta (porta 8081 nesta máquina):</p>
-            <code className="aj-code">docker run -d --name languagetool -p 127.0.0.1:8081:8010 --restart unless-stopped erikvl87/languagetool</code>
-            <p className="aj-hint">Ou baixe o LanguageTool em languagetool.org e rode o servidor HTTP com Java.</p>
+            <p>Com Java instalado, o script do Folio baixa o LanguageTool oficial (uma vez, em ~/.local/share/folio) e sobe o servidor em 127.0.0.1:8081:</p>
+            <code className="aj-code">scripts/languagetool-local.sh</code>
+            <p className="aj-hint">
+              <code>scripts/languagetool-local.sh --systemd</code> mostra um serviço systemd de usuário para subir junto com o computador. Com Docker:{' '}
+              <code>docker run -d --name languagetool -p 127.0.0.1:8081:8010 --restart unless-stopped erikvl87/languagetool</code>
+            </p>
           </div>
         </div>
       )}

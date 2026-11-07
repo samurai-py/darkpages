@@ -33,12 +33,13 @@ import {
 } from '../ai'
 import { APELIDOS_CLAUDE, modelosCodex } from '../ai/cli'
 import { salvarProativo } from '../insights/config'
-import { checarLanguageTool, ltBase, revisorSettings, salvarRevisorSettings } from '../ai/languagetool'
+import { checarLanguageTool, ltBase, revisorSettings, salvarRevisorSettings, testarLanguageTool } from '../ai/languagetool'
 import { contextoIa, fichaTexto, lerQuadro, MARCA_PROVISORIO, resumoCapitulo, type ContextoIa, type ResumoDoc } from '../ai/contexto'
 import { conflitosComoSugestoes, continuidadeDeterministica, revelacoesAntecipadas, revelacoesComoSugestoes } from '../ai/continuidade'
 import { aplicarTrocas, contexto, hashTexto, pedacos, revalidarTrocas, type Troca } from '../ai/texto'
 import { dicionarioDoLivro, listarDecisoes } from '../ai/decisoes'
 import { repeticoesRevisor } from '../insights/repeticao'
+import { abrirTesauro, resolverSinonimos } from '../ai/tesauro'
 import { conflitoMantido, filtrarSugestoes, trechoMantido } from '../../shared/decisoes'
 
 /**
@@ -219,8 +220,24 @@ export { redigir }
 // sinônimos
 // ---------------------------------------------------------------------------
 
-async function sinonimos(ctx: Ctx, palavra: string, frase: string): Promise<SinonimosResult> {
+/** IA ligada e com chave (o mesmo critério de `ia.status`.configurado). */
+async function iaConfigurada(ctx: Ctx): Promise<boolean> {
+  const s = await aiSettings(ctx)
+  const chave = s.provider === 'anthropic' ? s.anthropicKey : s.provider === 'openai' ? s.openaiKey : s.provider === 'gemini' ? s.geminiKey : 'x'
+  return s.provider !== 'off' && !!chave
+}
+
+/** Dicionário de sinônimos offline primeiro; IA pelo contexto só sob pedido (ver ai/tesauro.ts). */
+async function sinonimos(ctx: Ctx, palavra: string, frase: string, modo: 'auto' | 'ia'): Promise<SinonimosResult> {
   if (!palavra) throw new Error('Escolha uma palavra.')
+  return resolverSinonimos(palavra, modo, {
+    tesauro: () => abrirTesauro(ctx.resourcesDir),
+    iaConfigurada: () => iaConfigurada(ctx),
+    ia: () => sinonimosIa(ctx, palavra, frase)
+  })
+}
+
+async function sinonimosIa(ctx: Ctx, palavra: string, frase: string): Promise<SinonimosResult> {
   const r = await aiChat(ctx, {
     system:
       'Você é um dicionário de sinônimos do português do Brasil para escritores. Dada uma palavra e a frase onde ela está, ' +
@@ -729,8 +746,11 @@ export const handlers: Handlers = {
   'ia.ideias': async (ctx, dir, file, pedido) =>
     ideias(ctx, await bookDir(ctx, dir), capFile(file), pedido === undefined || pedido === null ? '' : texto(pedido, 600, 'Pedido')),
 
-  'ia.sinonimos': async (ctx, palavra, frase) =>
-    sinonimos(ctx, texto(palavra, 60, 'Palavra'), frase === undefined || frase === null ? '' : texto(frase, 2000, 'Frase')),
+  'ia.sinonimos': async (ctx, palavra, frase, modo) =>
+    sinonimos(ctx, texto(palavra, 60, 'Palavra'), frase === undefined || frase === null ? '' : texto(frase, 2000, 'Frase'), modo === 'ia' ? 'ia' : 'auto'),
+
+  /** 'ia.testarLanguageTool'(url?) → { versao, ms, url, achados }: confere o servidor (URL local validada) com uma frase pt-BR. */
+  'ia.testarLanguageTool': async (ctx, url) => testarLanguageTool(ctx, url === undefined || url === null || url === '' ? undefined : str(url, 500)),
 
   'ia.continuidade': async (ctx, dir, file) => continuidade(ctx, await bookDir(ctx, dir), capFile(file)),
 

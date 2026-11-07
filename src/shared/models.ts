@@ -169,12 +169,26 @@ export interface IdeiasResult {
   avisos?: string[]
 }
 
-/** 'ia.sinonimos'(palavra, frase) → { sinonimos: string[]; fortes: string[]; classe: string } */
+/**
+ * 'ia.sinonimos'(palavra, frase, modo?) → { sinonimos, fortes, classe, ... }.
+ * modo 'auto' (padrão): dicionário offline primeiro, IA só se não houver dicionário/verbete;
+ * modo 'ia': pede à IA pelo contexto da frase (botão explícito no popup).
+ */
 export interface SinonimosResult {
   sinonimos: string[]
   fortes: string[]
-  /** ex.: "verbo · passado · ela" */
+  /** ex.: "verbo · passado · ela" (vazio quando o dicionário não informa) */
   classe: string
+  /** de onde vieram: dicionário de sinônimos offline (MyThes do LibreOffice) ou IA */
+  fonte?: 'tesauro' | 'ia'
+  /** sentidos do dicionário (rótulo + palavras), quando `fonte` = 'tesauro' */
+  sentidos?: Array<{ titulo: string; palavras: string[] }>
+  /** forma básica achada no dicionário quando a palavra veio flexionada (ex.: "correu" → "correr") */
+  lema?: string
+  /** IA configurada: o popup oferece "Sugestões pelo contexto (IA)" */
+  iaDisponivel?: boolean
+  /** recado para o autor (dicionário ausente, palavra fora dele) */
+  aviso?: string
 }
 
 /** 'ia.continuidade'(dir, chapterFile) → Conflito[] */

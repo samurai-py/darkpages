@@ -6,6 +6,7 @@ import { spineWidthMm, type ChapterContent, type ExportResult, type PerfilPdf, t
 import { stageAberturas, stageImagens } from './assets'
 import { bookImageNames, buildBookTypst, type BookAssets } from './typst-source'
 import { compileTypst, findTypst, writeSource } from './typst'
+import { calibrarPaginas } from './calibracao'
 
 export interface PreparedBook {
   project: Project
@@ -91,6 +92,10 @@ export async function exportPrintPdf(dir: string, resourcesDir: string, perfil: 
     inputName: perfil === 'grafica' ? 'livro.typ' : `livro-${perfil}.typ`
   })
   // a paginação da gráfica e do KDP é a mesma (mesmo formato e margens); a da tela não serve para a lombada
-  if (perfil !== 'tela') await rememberPageCount(dir, pages, b.fingerprint)
+  if (perfil !== 'tela') {
+    await rememberPageCount(dir, pages, b.fingerprint)
+    // calibra a estimativa de páginas do Manuscrito (falha aqui não estraga a exportação)
+    await calibrarPaginas(b, pages).catch(() => null)
+  }
   return { pdfPath, pages, spineMm: spineWidthMm(pages, b.project.meta.layout.paper.caliperMm), warnings, perfil }
 }
