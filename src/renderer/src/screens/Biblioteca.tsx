@@ -9,6 +9,7 @@ import { Norte } from '../features/sync/biblioteca/Norte'
 import { Inspiracoes } from '../features/sync/biblioteca/Inspiracoes'
 import { Trilha } from '../features/sync/biblioteca/Trilha'
 import { lerMetas, salvarMetas } from '../features/manuscrito/metas'
+import { ExportarLivro, ImportarLivro } from '../features/importar/ImportarLivro'
 import './biblioteca.css'
 
 interface Featured {
@@ -50,6 +51,11 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
   const [novoTitulo, setNovoTitulo] = useState('')
   const [novoAutor, setNovoAutor] = useState('')
   const [erroNome, setErroNome] = useState<string | null>(null)
+  /** modal de importar regras e dados: no livro em destaque ou criando um livro novo */
+  const [importar, setImportar] = useState<'livro' | 'novo' | null>(null)
+  const [exportar, setExportar] = useState(false)
+  /** livro criado a partir de arquivo: abre quando o resumo fecha */
+  const [criado, setCriado] = useState<Project | null>(null)
 
   const salvarNome = async (e: FormEvent): Promise<void> => {
     e.preventDefault()
@@ -194,6 +200,9 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
           <button type="submit" className="btn pri" disabled={busy !== null || !title.trim()}>
             Criar livro
           </button>
+          <button type="button" className="btn" disabled={busy !== null} onClick={() => setImportar('novo')}>
+            Criar a partir de arquivo…
+          </button>
         </form>
       )}
 
@@ -299,6 +308,14 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
                 Ver diagramação
               </button>
             </div>
+            <div className="bib-row">
+              <button type="button" className="bib-link" onClick={() => setImportar('livro')}>
+                Importar regras e dados…
+              </button>
+              <button type="button" className="bib-link" onClick={() => setExportar(true)}>
+                Exportar como arquivo
+              </button>
+            </div>
           </div>
         </section>
       )}
@@ -325,6 +342,31 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
           </div>
         )}
       </section>
+
+      {importar === 'livro' && feat && (
+        <ImportarLivro
+          dir={feat.project.dir}
+          titulo={feat.project.meta.title}
+          onClose={() => setImportar(null)}
+          onFeito={(project) => {
+            setFeat((f) => (f ? { ...f, project } : f))
+            setRecents((l) => (l ?? []).map((r) => (r.dir === project.dir ? { ...r, title: project.meta.title } : r)))
+            void lerMetas(project.dir)
+              .then((m) => setFeat((f) => (f ? { ...f, meta: m.metaLivro ? m.metaLivro : null } : f)))
+              .catch(() => undefined)
+          }}
+        />
+      )}
+      {importar === 'novo' && (
+        <ImportarLivro
+          onClose={() => {
+            setImportar(null)
+            if (criado) onOpen(criado)
+          }}
+          onFeito={(project) => setCriado(project)}
+        />
+      )}
+      {exportar && feat && <ExportarLivro dir={feat.project.dir} onClose={() => setExportar(false)} />}
 
       {feat && (
         <section className="bib-panels" aria-label={`Painéis de ${feat.project.meta.title}`}>

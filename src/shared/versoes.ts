@@ -8,6 +8,7 @@ export type MotivoSnapshot =
   | 'antes de reordenar'
   | 'antes de aplicar revisão'
   | 'antes de importar'
+  | 'antes de importar regras'
   | 'antes de restaurar'
   | 'manual'
 
@@ -16,6 +17,7 @@ export const MOTIVOS: MotivoSnapshot[] = [
   'antes de reordenar',
   'antes de aplicar revisão',
   'antes de importar',
+  'antes de importar regras',
   'antes de restaurar',
   'manual'
 ]

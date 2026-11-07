@@ -12,6 +12,7 @@ import { handlers as arte } from '../features/arte'
 import { handlers as insights } from '../features/insights'
 import { handlers as versoes } from '../features/versoes'
 import { handlers as revisao } from '../features/revisao'
+import { handlers as importar } from '../features/importar'
 
 /** Todos os métodos da API, iguais no desktop (IPC) e no web (HTTP). */
 export const registry: Handlers = {
@@ -27,7 +28,8 @@ export const registry: Handlers = {
   ...arte,
   ...insights,
   ...versoes,
-  ...revisao
+  ...revisao,
+  ...importar
 }
 
 export async function dispatch(ctx: Ctx, method: string, args: unknown[]): Promise<unknown> {

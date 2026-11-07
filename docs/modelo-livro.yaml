@@ -1,0 +1,162 @@
+# ============================================================================
+# FOLIO — arquivo de importação do livro (formato "folio-livro", versão 1)
+#
+# Como usar:
+#   1. Preencha só o que quiser. Toda seção é opcional; apague as que não usar.
+#   2. Referências são por NOME (fichas) e por TÍTULO (capítulos/partes/cartões).
+#      Escreva igualzinho ao que está no arquivo (maiúsculas e acentos não importam).
+#   3. No Folio: Biblioteca › livro › "Importar regras e dados…" (ou crie um livro novo
+#      a partir do arquivo). O app mostra uma prévia do que vai criar/atualizar e só
+#      grava quando você confirmar. Antes de gravar, salva uma versão de segurança.
+#   4. Importar de novo o mesmo arquivo ATUALIZA o que já existe (casando por nome/
+#      título) e cria o que falta. Nada é apagado.
+#
+# Texto longo: use "|" e escreva nas linhas de baixo, recuado (ver "texto:" abaixo).
+# Linhas que começam com # são comentários e são ignoradas.
+# ============================================================================
+
+formato: folio-livro
+versao: 1
+
+# ---------------------------------------------------------------- o livro ---
+livro:
+  titulo: MEU LIVRO
+  autor: Mario
+  subtitulo: ""
+  meta_palavras: 90000          # meta do livro inteiro
+  meta_capitulo: 3000           # meta por capítulo
+
+# ------------------------------------------------- perfil da obra (para a IA) ---
+perfil:
+  narrador_nao_confiavel: true  # falas e narração podem mentir de propósito
+  ambiguidade_deliberada: true  # lacunas e duplo sentido são intencionais
+  nao_linear: false             # a ordem dos capítulos não é a ordem dos fatos
+  notas_ia: |
+    Tom sombrio e seco. O inferno tem nove círculos e cada capítulo acontece em um.
+    Nunca explique a cosmologia de uma vez; deixe o leitor montar.
+
+# ------------------------------------------------ nome dos capítulos e partes ---
+# estilo: classico-extenso (Capítulo um) | classico-numero (Capítulo 1)
+#         ordinal-palavra (Primeiro Círculo) | romano (I) | romano-palavra (Livro I)
+#         numero (1) | modelo (use "modelo") | nenhum
+# genero: m (primeiro/um) | f (primeira/uma)    caixa: normal | maiusculas | versalete
+# modelo aceita {n} {extenso} {ordinal} {romano} {palavra}
+nomes:
+  capitulos: { estilo: ordinal-palavra, palavra: Círculo, genero: m, caixa: maiusculas }
+  partes:    { estilo: classico-extenso, palavra: Parte, genero: m, caixa: maiusculas }
+  reiniciar_numeracao_por_parte: false
+
+# ------------------------------------------------------------------ fichas ---
+# tipo: personagem | lugar | objeto | grupo | divindade
+fichas:
+  - nome: Viktor
+    tipo: personagem
+    apelidos: [Vik, o Condenado]
+    papel: protagonista
+    grupo: Os Mortos
+    notas: |
+      Acredita que está no inferno por um único pecado. Não está.
+    campos:
+      Olhos: cinzentos
+      Idade: 41
+      # atributo que muda ao longo do livro: valor inicial + mudanças por capítulo
+      Status:
+        valor: vivo
+        muda:
+          - { a_partir_de: Segunda Morte, valor: morto }
+    relacoes:
+      - { com: Elisa, rotulo: marido de }
+
+  - nome: Elisa
+    tipo: personagem
+    apelidos: [a esposa]
+    papel: esposa de Viktor
+    campos:
+      Cabelo: ruivo
+
+  - nome: Limbo
+    tipo: lugar
+    papel: primeiro círculo
+    campos:
+      Clima: névoa permanente
+
+# --------------------------------------------- estrutura: partes e capítulos ---
+# Na ordem do livro. tipo: capitulo (padrão) | prologo | epilogo | parte
+# Capítulo que já existe (mesmo título) é ATUALIZADO; texto só é trocado se você
+# escrever "texto:" e marcar "substituir_texto: true" — senão o texto atual fica.
+capitulos:
+  - titulo: O Portão
+    tipo: prologo
+    sinopse: Viktor acorda diante do portão sem lembrar como morreu.
+
+  - titulo: A Descida
+    tipo: parte
+
+  - titulo: Segunda Morte
+    sinopse: Viktor descobre que pode morrer de novo no inferno.
+    pov: Viktor             # nome de ficha (personagem)
+    cenario: Limbo          # nome de ficha (lugar)
+    notas: Fechar com a primeira pista sobre Elisa.
+    epigrafe: { texto: "Lasciate ogne speranza, voi ch'intrate.", autor: Dante }
+
+  - titulo: Tudo o Que Amamos
+    sinopse: Viktor encontra alguém que conhece o nome da esposa.
+    texto: |
+      — Você não lembra o nome dela, lembra?
+
+      Viktor não respondeu.
+
+# ------------------------------------------------- enredo: cartões do quadro ---
+# tipo: cena | virada | personagem | ideia | local | fato
+# capitulo: título do capítulo ao qual o cartão pertence (opcional)
+# fichas: nomes ligados ao cartão
+cartoes:
+  - titulo: Viktor morre pela segunda vez
+    tipo: cena
+    capitulo: Segunda Morte
+    fichas: [Viktor]
+    texto: Ele cai no rio e acorda de novo na margem.
+
+  # FATO = verdade do livro. revelar_em = capítulo a partir do qual o leitor pode
+  # saber. termos = palavras que entregam o segredo (o app avisa se aparecerem antes).
+  - titulo: O nome da esposa é Elisa
+    tipo: fato
+    perspectiva: verdade
+    revelar_em: Nunca é Suficiente
+    termos: [Elisa]
+
+  # CRENÇA = o que um personagem acredita ou afirma (pode ser falso).
+  - titulo: Viktor acredita que está aqui por ter matado o irmão
+    tipo: fato
+    perspectiva: { crenca_de: Viktor }
+
+  # FIO SOLTO = promessa/pergunta ao leitor. Vale em qualquer tipo de cartão.
+  - titulo: Quem empurrou Viktor?
+    tipo: ideia
+    capitulo: Segunda Morte
+    fio: { status: aberto, resolve_em: Sem Perdão }
+
+# ligações entre cartões (por título). tipo: causa | relacao
+ligacoes:
+  - { de: Viktor morre pela segunda vez, para: Quem empurrou Viktor?, tipo: causa, rotulo: abre a pergunta }
+
+# ------------------------------------------ revisão: o que é de propósito ---
+manter:
+  palavras: [sombra, cinza]      # repetições deliberadas: o Revisor não aponta
+  trechos: ["Nunca é suficiente."]
+
+# ------------------------------------------- diagramação: páginas do livro ---
+paginas:
+  dedicatoria: Para quem desceu e voltou.
+  epigrafe: { texto: "No meio do caminho desta vida…", autor: Dante Alighieri }
+  editora: Edição do autor
+  cidade: São Paulo
+  ano: 2027
+  isbn: ""
+  agradecimentos: |
+    A quem leu os primeiros círculos.
+  sobre_o_autor: |
+    Mario escreve à noite.
+  posfacio: ""
+  sinopse_contracapa: |
+    Um homem morre. Depois morre de novo.

@@ -411,10 +411,14 @@ export async function deleteChapter(dir: string, file: string): Promise<string> 
   return dest
 }
 
-/** Acrescenta vários capítulos ao fim do livro (importação). Devolve os nomes criados. */
+/**
+ * Acrescenta vários capítulos ao fim do livro (importação). Devolve os nomes criados.
+ * `id` (válido por CHAPTER_ID e ainda não usado), `cena` e `epigrafe` são opcionais:
+ * a importação de regras e dados já planeja as referências com o id do capítulo novo.
+ */
 export async function appendChapters(
   dir: string,
-  items: Array<{ title: string; kind: ChapterKind; body: string }>
+  items: Array<{ title: string; kind: ChapterKind; body: string; id?: string; cena?: CenaMeta; epigrafe?: import('../shared/types').EpigrafeCap }>
 ): Promise<string[]> {
   const files = await chapterFiles(dir)
   let next = files.length ? Number(files.at(-1)!.slice(0, 3)) + 1 : 1
@@ -422,7 +426,11 @@ export async function appendChapters(
   const created: string[] = []
   for (const it of items) {
     const file = `${String(next).padStart(3, '0')}-${slugify(it.title)}.md`
-    await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: it.title, tipo: it.kind, id: novoIdCapitulo() }, it.body))
+    const id = it.id && CHAPTER_ID.test(it.id) ? it.id : novoIdCapitulo()
+    const extra: FrontMatter = {}
+    if (it.cena) extra.cena = it.cena
+    if (it.epigrafe) extra.epigrafe = it.epigrafe
+    await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: it.title, tipo: it.kind, id, ...extra }, it.body))
     created.push(file)
     next++
   }
