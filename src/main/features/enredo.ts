@@ -1,5 +1,6 @@
 import { bookDir, type Handlers } from '../api/context'
-import { getDoc, putDoc } from '../store/docs'
+import { getDoc, newId, putDoc } from '../store/docs'
+import { desligarDosMapas } from './mapas'
 import type { Cartao, CartaoTipo, EnredoBoard, Ligacao } from '../../shared/models'
 
 /**
@@ -81,22 +82,49 @@ export const handlers: Handlers = {
     return sanearBoard(await getDoc<EnredoBoard>(d, COLECAO, DOC))
   },
 
-  /** 'enredo.salvar'(dir, board) → EnredoBoard saneado e gravado. */
+  /**
+   * 'enredo.salvar'(dir, board) → EnredoBoard saneado e gravado.
+   * Cartões que saíram do quadro também saem das ligações dos mapas.
+   */
   'enredo.salvar': async (ctx, dir, board): Promise<EnredoBoard> => {
     const d = await bookDir(ctx, dir)
     if (!board || typeof board !== 'object') throw new Error('Quadro inválido')
     const limpo = sanearBoard(board)
+    const antes = sanearBoard(await getDoc<EnredoBoard>(d, COLECAO, DOC))
     await putDoc(d, COLECAO, DOC, limpo)
+    const ficam = new Set(limpo.cartoes.map((c) => c.id))
+    const sairam = antes.cartoes.filter((c) => !ficam.has(c.id)).map((c) => c.id)
+    if (sairam.length) await desligarDosMapas(d, { cartoes: sairam })
     return limpo
   },
 
-  /** 'enredo.doCapitulo'(dir, chapterFile) → Cartao[] do capítulo em ordem de roteiro (útil para IA/Manuscrito). */
-  'enredo.doCapitulo': async (ctx, dir, file): Promise<Cartao[]> => {
+  /**
+   * 'enredo.adicionarCartao'(dir, { tipo, titulo, texto, capitulo?, fichas? }) → Cartao criado.
+   * Para quem cria cartão fora da tela do Enredo (Inspector, Insights): lê o
+   * quadro atual, posiciona o cartão, põe no fim do roteiro do capítulo e
+   * grava saneado — sem a interface reenviar o quadro inteiro.
+   */
+  'enredo.adicionarCartao': async (ctx, dir, dados): Promise<Cartao> => {
     const d = await bookDir(ctx, dir)
-    const f = texto(file, 200)
-    const { cartoes } = sanearBoard(await getDoc<EnredoBoard>(d, COLECAO, DOC))
-    return cartoes
-      .filter((c) => c.capitulo === f)
-      .sort((a, b) => (a.ordem ?? 1e9) - (b.ordem ?? 1e9) || a.criadoEm.localeCompare(b.criadoEm))
+    if (!dados || typeof dados !== 'object') throw new Error('Cartão inválido')
+    const o = dados as Record<string, unknown>
+    const board = sanearBoard(await getDoc<EnredoBoard>(d, COLECAO, DOC))
+    const n = board.cartoes.length
+    if (n >= MAX_CARTOES) throw new Error('O quadro já tem cartões demais')
+    const cap = texto(o.capitulo, 200)
+    const novo = cartao({
+      id: newId('cartao'),
+      tipo: o.tipo,
+      titulo: o.titulo,
+      texto: o.texto,
+      fichas: o.fichas,
+      x: 60 + (n % 5) * 260,
+      y: 60 + Math.floor(n / 5) * 200,
+      criadoEm: new Date().toISOString(),
+      ...(CAPITULO.test(cap) ? { capitulo: cap, ordem: board.cartoes.filter((c) => c.capitulo === cap).length } : {})
+    })
+    if (!novo) throw new Error('Cartão inválido')
+    await putDoc(d, COLECAO, DOC, { ...board, cartoes: [...board.cartoes, novo] })
+    return novo
   }
 }

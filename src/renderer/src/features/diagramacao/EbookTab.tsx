@@ -38,7 +38,10 @@ export function EbookTab({ project, l, flush }: Props): ReactElement {
     f.dedicatoria && f.dedicatoriaTexto.trim() ? 'Dedicatória' : null,
     f.epigrafe && f.epigrafeTexto.trim() ? 'Epígrafe' : null,
     'Sumário navegável',
-    `${project.chapters.length} capítulos, com notas no fim de cada um`,
+    `${project.chapters.length} capítulos, com notas no fim de cada um, epígrafes e imagens com legenda`,
+    f.posfacio && f.posfacioTexto.trim() ? 'Posfácio' : null,
+    f.agradecimentos && f.agradecimentosTexto.trim() ? 'Agradecimentos' : null,
+    f.sobreAutor && (f.sobreAutorTexto.trim() || f.sobreAutorFoto) ? 'Sobre o autor' : null,
     f.colofao ? 'Colofão' : null
   ].filter((x): x is string => Boolean(x))
 
@@ -46,7 +49,7 @@ export function EbookTab({ project, l, flush }: Props): ReactElement {
     <section className="dg-work" aria-live="polite" aria-busy={busy}>
       <div className="panel dg-card">
         <h2 className="disp">E-book (EPUB 3)</h2>
-        <p className="muted">Arquivo único para Kindle (via Send to Kindle/KDP), Kobo, Apple Livros e Google Play. A fonte e o corpo ficam a cargo do leitor; capitulares, quebras de cena e artes de abertura vão junto.</p>
+        <p className="muted">Arquivo único para Kindle (via Send to Kindle/KDP), Kobo, Apple Livros e Google Play. O corpo fica a cargo do leitor; a fonte do miolo vai embutida quando é uma das fontes livres (OFL) que vêm com o Folio. Capitulares, quebras de cena e artes de abertura vão junto, com metadados de acessibilidade.</p>
         <ul className="dg-list">
           {parts.map((p) => (
             <li key={p}>{p}</li>
@@ -67,7 +70,8 @@ export function EbookTab({ project, l, flush }: Props): ReactElement {
         <div className="panel dg-card">
           <h2 className="disp">EPUB pronto</h2>
           <p>
-            {res.capitulos} capítulos · {res.notas} notas · {res.aberturas} artes de abertura · {res.capa ? 'com capa' : 'sem capa'} · {fmt(res.bytes / 1024, 0)} KB
+            {res.capitulos} capítulos · {res.notas} notas · {res.aberturas} artes de abertura · {res.figuras} imagens no texto · {res.capa ? 'com capa' : 'sem capa'} ·{' '}
+            {res.fonte ? `fonte ${res.fonte} embutida` : 'fonte do leitor'} · {fmt(res.bytes / 1024, 0)} KB
           </p>
           <p className="dg-path">{res.epubPath}</p>
           <div className="dg-actions">

@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { openProject, readChapter, slugify } from '../project'
-import { spineWidthMm, type ChapterContent, type ExportResult, type Project } from '../../shared/types'
-import { stageAberturas } from './assets'
-import { buildBookTypst } from './typst-source'
+import { spineWidthMm, type ChapterContent, type ExportResult, type PerfilPdf, type Project } from '../../shared/types'
+import { stageAberturas, stageImagens } from './assets'
+import { bookImageNames, buildBookTypst, type BookAssets } from './typst-source'
 import { compileTypst, findTypst, writeSource } from './typst'
 
 export interface PreparedBook {
@@ -13,6 +14,10 @@ export interface PreparedBook {
   typst: string
   buildDir: string
   fontDirs: string[]
+  /** artes e imagens já copiadas para .build/ (para gerar o .typ de outro perfil) */
+  assets: BookAssets
+  /** impressão digital do miolo (perfil gráfica): muda quando texto ou diagramação mudam */
+  fingerprint: string
 }
 
 /** Lê o livro, copia as artes para .build/ e gera o código Typst do miolo. */
@@ -21,13 +26,18 @@ export async function prepareBook(dir: string, resourcesDir: string): Promise<Pr
   const chapters = await Promise.all(project.chapters.map((c) => readChapter(dir, c.file)))
   const buildDir = join(dir, '.build')
   const aberturas = await stageAberturas(dir, buildDir, project.chapters)
+  const imagens = await stageImagens(dir, buildDir, bookImageNames(project.meta, chapters))
+  const assets: BookAssets = { aberturas, imagens }
+  const source = buildBookTypst(project.meta, chapters, assets)
   return {
     project,
     chapters,
-    source: buildBookTypst(project.meta, chapters, { aberturas }),
+    source,
     typst: await findTypst(resourcesDir),
     buildDir,
-    fontDirs: [join(resourcesDir, 'fonts')]
+    fontDirs: [join(resourcesDir, 'fonts')],
+    assets,
+    fingerprint: createHash('sha1').update(source).digest('hex')
   }
 }
 
@@ -38,34 +48,49 @@ export async function writeBookSource(b: PreparedBook, name: string): Promise<vo
 
 const LAST = 'ultimo-miolo.json'
 
-/** Páginas do último miolo gerado (PDF ou prévia), para a lombada da capa. */
-export async function lastPageCount(dir: string): Promise<number | null> {
+/**
+ * Páginas do último miolo gerado (PDF, prévia ou checagem), para a lombada da
+ * capa. Com `fingerprint`, só vale se o miolo não mudou desde a contagem.
+ */
+export async function lastPageCount(dir: string, fingerprint?: string): Promise<number | null> {
   try {
-    const v = JSON.parse(await readFile(join(dir, '.build', LAST), 'utf8')) as { pages?: unknown }
+    const v = JSON.parse(await readFile(join(dir, '.build', LAST), 'utf8')) as { pages?: unknown; miolo?: unknown }
+    if (fingerprint !== undefined && v.miolo !== fingerprint) return null
     return typeof v.pages === 'number' && v.pages > 0 ? v.pages : null
   } catch {
     return null
   }
 }
 
-export async function rememberPageCount(dir: string, pages: number): Promise<void> {
+export async function rememberPageCount(dir: string, pages: number, fingerprint?: string): Promise<void> {
   await mkdir(join(dir, '.build'), { recursive: true })
-  await writeFile(join(dir, '.build', LAST), JSON.stringify({ pages, em: new Date().toISOString() }))
+  await writeFile(join(dir, '.build', LAST), JSON.stringify({ pages, miolo: fingerprint ?? null, em: new Date().toISOString() }))
 }
 
-/** Exporta o miolo em PDF para gráfica (sangria + marcas de corte conforme o projeto). */
-export async function exportPrintPdf(dir: string, resourcesDir: string): Promise<ExportResult & { warnings: string }> {
+const SUFIXO: Record<PerfilPdf, string> = { grafica: 'miolo', kdp: 'miolo-kdp', tela: 'tela' }
+export const PERFIS: PerfilPdf[] = ['grafica', 'kdp', 'tela']
+
+/**
+ * Exporta o miolo em PDF conforme o perfil:
+ * - gráfica: sangria nos 4 lados e marcas de corte conforme o projeto;
+ * - kdp: sangria de 0,125 pol só em cima, embaixo e na borda externa, sem marcas (especificação do KDP);
+ * - tela: formato final sem sangria nem marcas, sem páginas em branco forçadas, sumário com links.
+ */
+export async function exportPrintPdf(dir: string, resourcesDir: string, perfil: PerfilPdf = 'grafica'): Promise<ExportResult & { warnings: string; perfil: PerfilPdf }> {
   const b = await prepareBook(dir, resourcesDir)
   const outDir = join(dir, 'export')
   await mkdir(outDir, { recursive: true })
-  const pdfPath = join(outDir, `${slugify(b.project.meta.title)}-miolo.pdf`)
+  const pdfPath = join(outDir, `${slugify(b.project.meta.title)}-${SUFIXO[perfil]}.pdf`)
+  const source = perfil === 'grafica' ? b.source : buildBookTypst(b.project.meta, b.chapters, b.assets, perfil)
   const { pages, warnings } = await compileTypst({
     typst: b.typst,
     buildDir: b.buildDir,
-    source: b.source,
+    source,
     outPdf: pdfPath,
-    fontDirs: b.fontDirs
+    fontDirs: b.fontDirs,
+    inputName: perfil === 'grafica' ? 'livro.typ' : `livro-${perfil}.typ`
   })
-  await rememberPageCount(dir, pages)
-  return { pdfPath, pages, spineMm: spineWidthMm(pages, b.project.meta.layout.paper.caliperMm), warnings }
+  // a paginação da gráfica e do KDP é a mesma (mesmo formato e margens); a da tela não serve para a lombada
+  if (perfil !== 'tela') await rememberPageCount(dir, pages, b.fingerprint)
+  return { pdfPath, pages, spineMm: spineWidthMm(pages, b.project.meta.layout.paper.caliperMm), warnings, perfil }
 }

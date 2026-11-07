@@ -1,8 +1,10 @@
-import type { ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
+import { fileToDataUrl, folio } from '../../api'
 import type { FrontMatter } from '../../../../shared/types'
 import { NumField, Stepper, TextField } from './fields'
 import { Ico } from './icons'
 import { RotuloSeletor } from './RotuloSeletor'
+import { ModelosLayout } from './ModelosLayout'
 import {
   DROPCAPS,
   FOLIOS,
@@ -10,6 +12,7 @@ import {
   ORNAMENTS,
   PAPERS,
   TRIMS,
+  errText,
   fmt,
   spine,
   type FonteDisponivel,
@@ -18,6 +21,7 @@ import {
 } from './model'
 
 interface Props {
+  dir: string
   l: FullLayout
   set: (patch: Partial<FullLayout>) => void
   pages: number | null
@@ -28,7 +32,7 @@ interface Props {
 
 const ORIGEM = { projeto: 'do Folio', typst: 'do Typst', sistema: 'do sistema' } as const
 
-export function Painel({ l, set, pages, fontes, checks, checking }: Props): ReactElement {
+export function Painel({ dir, l, set, pages, fontes, checks, checking }: Props): ReactElement {
   const trimKey = TRIMS.findIndex((t) => t.w === l.trim.widthMm && t.h === l.trim.heightMm)
   const paperKey = PAPERS.findIndex((p) => p.name === l.paper.name)
   const f = l.front
@@ -38,6 +42,8 @@ export function Painel({ l, set, pages, fontes, checks, checking }: Props): Reac
 
   return (
     <aside className="dg-side" aria-label="Formato, tipografia e checagem">
+      <ModelosLayout l={l} set={set} />
+
       <fieldset className="dg-sec">
         <legend className="dg-eb">Formato e papel</legend>
         <div className="dg-grid2">
@@ -265,6 +271,34 @@ export function Painel({ l, set, pages, fontes, checks, checking }: Props): Reac
           Sumário
         </label>
         <label className="check">
+          <input type="checkbox" checked={f.posfacio} onChange={(e) => setF({ posfacio: e.target.checked })} />
+          Posfácio
+        </label>
+        {f.posfacio && (
+          <div className="dg-fm">
+            <TextField label="Texto do posfácio" multiline rows={6} value={f.posfacioTexto} placeholder="Parágrafos separados por linha em branco; aceita *itálico* e notas ^[assim]" onChange={(v) => setF({ posfacioTexto: v })} />
+          </div>
+        )}
+        <label className="check">
+          <input type="checkbox" checked={f.agradecimentos} onChange={(e) => setF({ agradecimentos: e.target.checked })} />
+          Agradecimentos
+        </label>
+        {f.agradecimentos && (
+          <div className="dg-fm">
+            <TextField label="Texto dos agradecimentos" multiline rows={5} value={f.agradecimentosTexto} onChange={(v) => setF({ agradecimentosTexto: v })} />
+          </div>
+        )}
+        <label className="check">
+          <input type="checkbox" checked={f.sobreAutor} onChange={(e) => setF({ sobreAutor: e.target.checked })} />
+          Sobre o autor
+        </label>
+        {f.sobreAutor && (
+          <div className="dg-fm">
+            <TextField label="Texto sobre o autor" multiline rows={5} value={f.sobreAutorTexto} onChange={(v) => setF({ sobreAutorTexto: v })} />
+            <FotoAutor dir={dir} nome={f.sobreAutorFoto} onChange={(nome) => setF({ sobreAutorFoto: nome })} />
+          </div>
+        )}
+        <label className="check">
           <input type="checkbox" checked={f.colofao} onChange={(e) => setF({ colofao: e.target.checked })} />
           Colofão no fim
         </label>
@@ -294,5 +328,80 @@ export function Painel({ l, set, pages, fontes, checks, checking }: Props): Reac
         )}
       </section>
     </aside>
+  )
+}
+
+/** Foto do autor em <livro>/assets/autor-foto.(png|jpg): envia, mostra e remove. */
+function FotoAutor({ dir, nome, onChange }: { dir: string; nome: string; onChange: (nome: string) => void }): ReactElement {
+  const [src, setSrc] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!nome) {
+      setSrc(null)
+      return
+    }
+    let vivo = true
+    folio.assets
+      .get(dir, nome)
+      .then((d) => vivo && setSrc(d))
+      .catch(() => vivo && setSrc(null))
+    return () => {
+      vivo = false
+    }
+  }, [dir, nome])
+
+  const enviar = async (file: File): Promise<void> => {
+    setErr(null)
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : null
+    if (!ext) {
+      setErr('Use uma foto PNG ou JPEG.')
+      return
+    }
+    setBusy(true)
+    try {
+      const novo = `autor-foto.${ext}`
+      await folio.assets.put(dir, novo, await fileToDataUrl(file))
+      if (nome && nome !== novo) await folio.assets.delete(dir, nome).catch(() => undefined)
+      setSrc(null)
+      onChange(novo)
+      // mesmo nome: força recarregar a miniatura
+      if (nome === novo) setSrc(await folio.assets.get(dir, novo))
+    } catch (e) {
+      setErr(errText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="field">
+      Foto (opcional)
+      {src && <img src={src} alt="Foto do autor" style={{ maxWidth: 96, maxHeight: 120, borderRadius: 4, display: 'block', margin: '4px 0' }} />}
+      <span className="dg-actions">
+        <label className="btn sm">
+          {busy ? 'Enviando…' : nome ? 'Trocar foto' : 'Escolher foto'}
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void enviar(file)
+            }}
+          />
+        </label>
+        {nome && (
+          <button type="button" className="btn sm" onClick={() => onChange('')}>
+            Tirar foto
+          </button>
+        )}
+      </span>
+      {nome && <span className="label">Sai centralizada, com 38% da largura do texto. A checagem avisa se tiver menos de 300 dpi.</span>}
+      {err && <span className="err">{err}</span>}
+    </div>
   )
 }

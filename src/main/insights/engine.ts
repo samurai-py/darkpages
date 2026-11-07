@@ -3,8 +3,10 @@ import { openProject, readChapter } from '../project'
 import { getDoc, listDocs, putDoc } from '../store/docs'
 import { aiChatCom, aiSettings, extractJson, NOME_PROVEDOR, modeloAutomatico, provedorExterno, type AiSettings } from '../ai'
 import { fichas, fichasCitadas, fichaTexto } from '../ai/contexto'
-import { continuidadeDeterministica } from '../ai/continuidade'
-import { hashTexto, idCapitulo, mascararMarkdown, semAcento } from '../ai/texto'
+import { continuidadeDeterministica, type CapituloOrdem } from '../ai/continuidade'
+import { hashTexto } from '../ai/texto'
+import { avisosRepeticao } from './repeticao'
+import { getDocCapitulo, putDocCapitulo } from '../store/capitulo-docs'
 import { destaque, type Diario } from '../sync/progresso'
 import { countWords } from '../../shared/types'
 import type { Ficha, Insight, InsightAcao, InsightTipo, ProativoEstado, ProativoSettings } from '../../shared/models'
@@ -44,21 +46,35 @@ export interface ResultadoAnalise {
 }
 
 const COL = 'insights'
-const COL_ESTADO = 'insights-estado'
+const COL_ESTADO = 'insights-estado' as const
 
+/**
+ * Id do insight: hash de tipo + capítulo + trecho. O capítulo entra pelo id
+ * estável (não pelo nome do arquivo), para o mesmo achado não voltar depois
+ * de reordenar os capítulos.
+ */
 export function idInsight(tipo: InsightTipo, capitulo: string, trecho: string): string {
   return `i-${hashTexto(`${tipo}|${capitulo}|${trecho.trim()}`).slice(0, 24)}`
+}
+
+/** arquivo do capítulo → id estável */
+async function idsDosCapitulos(dir: string): Promise<Map<string, string>> {
+  return new Map((await openProject(dir)).chapters.map((c) => [c.file, c.id]))
 }
 
 /** Grava só os insights que ainda não existem (mesmo tipo+capítulo+trecho não repete). */
 export async function gravarNovos(dir: string, lista: Novo[]): Promise<number> {
   let n = 0
   const vistos = new Set<string>()
+  const ids = await idsDosCapitulos(dir)
   for (const it of lista) {
-    const id = idInsight(it.tipo, it.capitulo, it.trecho || it.texto)
+    const trecho = it.trecho || it.texto
+    const id = idInsight(it.tipo, ids.get(it.capitulo) ?? it.capitulo, trecho)
     if (vistos.has(id)) continue
     vistos.add(id)
     if (await getDoc(dir, COL, id)) continue
+    // insight gravado antes do id estável (chave pelo nome do arquivo): não repete
+    if (it.capitulo && (await getDoc(dir, COL, idInsight(it.tipo, it.capitulo, trecho)))) continue
     await putDoc<Omit<Insight, 'id'>>(dir, COL, id, { ...it, status: 'novo', criadoEm: new Date().toISOString() })
     n++
   }
@@ -69,63 +85,27 @@ export async function gravarNovos(dir: string, lista: Novo[]): Promise<number> {
 // checagens locais
 // ---------------------------------------------------------------------------
 
-const STOP = new Set(
-  'porque quando sobre entre ainda depois antes mesmo mesma assim tinha tinham estava estavam havia seria sendo apenas outro outra outros outras todos todas aquele aquela aquilo nossa nosso minha dele dela deles delas nada tudo agora sempre nunca muito muita muitos muitas pouco quase talvez onde quem coisa disse'.split(
-    ' '
-  )
-)
-
-/** Frase do texto em volta de uma posição. */
-function fraseEm(texto: string, i: number): string {
-  const ini = Math.max(texto.lastIndexOf('.', i - 1), texto.lastIndexOf('!', i - 1), texto.lastIndexOf('?', i - 1), texto.lastIndexOf('\n', i - 1)) + 1
-  const fins = ['.', '!', '?', '\n'].map((c) => texto.indexOf(c, i)).filter((x) => x >= 0)
-  const fim = fins.length ? Math.min(...fins) + 1 : texto.length
-  return texto.slice(ini, fim).trim().slice(0, 300)
-}
-
 /**
  * Repetições próximas: a mesma palavra (5+ letras, fora de palavras comuns)
- * duas ou mais vezes dentro de 30 palavras. Devolve as mais densas primeiro.
+ * duas ou mais vezes dentro de 30 palavras. Cada trecho em que a palavra se
+ * acumula é um achado próprio (ver insights/repeticao.ts); os mais densos
+ * primeiro.
  */
 export function repeticoesProximas(md: string, max = 3, janela = 30): Novo[] {
-  const limpo = mascararMarkdown(md)
-  const palavras = [...limpo.matchAll(/[\p{L}]+(?:[-'’][\p{L}]+)*/gu)].map((m) => ({ w: semAcento(m[0].toLowerCase()), pos: m.index ?? 0, orig: m[0] }))
-  const achados = new Map<string, { n: number; pos: number; orig: string }>()
-  const ultimo = new Map<string, number>()
-  palavras.forEach((p, i) => {
-    if (p.w.length < 5 || STOP.has(p.w) || /^\p{Lu}/u.test(p.orig)) return
-    const ant = ultimo.get(p.w)
-    ultimo.set(p.w, i)
-    if (ant === undefined || i - ant > janela) return
-    const a = achados.get(p.w)
-    if (a) a.n++
-    else achados.set(p.w, { n: 2, pos: p.pos, orig: p.orig })
-  })
-  // agrupa por frase: palavras repetidas na mesma frase viram um aviso só
-  const porFrase = new Map<string, Array<{ palavra: string; n: number }>>()
-  for (const a of [...achados.values()].sort((x, y) => y.n - x.n)) {
-    const frase = fraseEm(md, a.pos)
-    const l = porFrase.get(frase) ?? []
-    l.push({ palavra: a.orig.toLowerCase(), n: a.n })
-    porFrase.set(frase, l)
-  }
-  return [...porFrase.entries()]
-    .sort((a, b) => (b[1][0]?.n ?? 0) - (a[1][0]?.n ?? 0))
-    .slice(0, max)
-    .map(([trecho, ws]) => ({
-      tipo: 'estilo' as const,
-      capitulo: '',
-      trecho,
-      texto:
-        ws.length === 1
-          ? `“${ws[0]?.palavra}” aparece ${ws[0]?.n}× em poucas linhas. Vale variar ou cortar uma das ocorrências.`
-          : `Repetições próximas: ${ws.slice(0, 4).map((w) => `“${w.palavra}” ${w.n}×`).join(', ')}. Vale variar ou cortar.`,
-      origem: 'local' as const
-    }))
+  return avisosRepeticao(md, max, janela).map((a) => ({
+    tipo: 'estilo' as const,
+    capitulo: '',
+    trecho: a.trecho,
+    texto:
+      a.palavras.length === 1
+        ? `“${a.palavras[0]?.palavra}” aparece ${a.palavras[0]?.n}× em poucas linhas. Vale variar ou cortar uma das ocorrências.`
+        : `Repetições próximas: ${a.palavras.slice(0, 4).map((w) => `“${w.palavra}” ${w.n}×`).join(', ')}. Vale variar ou cortar.`,
+    origem: 'local' as const
+  }))
 }
 
-function continuidadeLocal(md: string, file: string, lista: Ficha[]): Novo[] {
-  return continuidadeDeterministica(md, file, lista).map((c) => {
+function continuidadeLocal(md: string, file: string, lista: Ficha[], capitulos: CapituloOrdem[]): Novo[] {
+  return continuidadeDeterministica(md, file, lista, capitulos).map((c) => {
     const acao: InsightAcao = c.troca
       ? { tipo: 'substituir', original: c.troca.original, substituto: c.troca.substituto, antes: c.troca.antes, depois: c.troca.depois }
       : { tipo: 'abrirFicha', fichaId: c.fichaId }
@@ -251,8 +231,7 @@ export async function analisarCapitulo(ctx: Ctx, dir: string, file: string, moti
   const md = cap.body
   const hash = hashTexto(md)
   const palavras = countWords(md)
-  const id = idCapitulo(file)
-  const est: EstadoCapitulo = (await getDoc<EstadoCapitulo>(dir, COL_ESTADO, id)) ?? {}
+  const est: EstadoCapitulo = (await getDocCapitulo<EstadoCapitulo>(dir, COL_ESTADO, file, cap.id)) ?? {}
   const suficiente = (m: Marca | undefined): boolean =>
     !m ? palavras >= cfg.palavrasMin : m.hash !== hash && Math.abs(palavras - m.palavras) >= cfg.palavrasMin
   const agora = new Date().toISOString()
@@ -266,7 +245,7 @@ export async function analisarCapitulo(ctx: Ctx, dir: string, file: string, moti
   if (suficiente(est.local)) {
     analisado = true
     const locais: Novo[] = []
-    if (cfg.tipos.continuidade) locais.push(...continuidadeLocal(md, file, lista))
+    if (cfg.tipos.continuidade) locais.push(...continuidadeLocal(md, file, lista, (await openProject(dir)).chapters))
     if (cfg.tipos.estilo) locais.push(...repeticoesProximas(md).map((x) => ({ ...x, capitulo: file })))
     novos += await gravarNovos(dir, locais)
     est.local = marca
@@ -290,7 +269,7 @@ export async function analisarCapitulo(ctx: Ctx, dir: string, file: string, moti
     }
   }
 
-  if (analisado) await putDoc(dir, COL_ESTADO, id, est)
+  if (analisado) await putDocCapitulo(dir, COL_ESTADO, file, est, cap.id)
   return { analisado, ...(analisado ? {} : { motivo: 'sem palavras novas suficientes' }), novos, chamadasIa }
 }
 
@@ -378,7 +357,8 @@ export async function resumoDia(ctx: Ctx, dir: string): Promise<Insight | null> 
 
   const novo: Novo = { tipo: 'resumo', capitulo: capFile, trecho: `dia ${hoje}`, texto: linhas.join('\n'), origem: comIa ? 'ia' : 'local' }
   await gravarNovos(dir, [novo])
-  return (await getDoc<Insight>(dir, COL, idInsight('resumo', capFile, novo.trecho))) ?? null
+  const capId = capFile ? ((await idsDosCapitulos(dir)).get(capFile) ?? capFile) : capFile
+  return (await getDoc<Insight>(dir, COL, idInsight('resumo', capId, novo.trecho))) ?? null
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,6 @@ import {
   type CartaoTipo,
   type CenaMeta,
   type Conflito,
-  type EnredoBoard,
   type Ficha,
   type FichaCampo,
   type Ideia,
@@ -501,25 +500,16 @@ function PainelIdeias(p: Props): ReactElement {
   const paraEnredo = async (alvo: IdeiaUI): Promise<void> => {
     setErro(null)
     try {
-      const atual = await folio.docs.get<EnredoBoard>(p.dir, 'enredo', 'board')
-      const board: EnredoBoard = { cartoes: atual?.cartoes ?? [], ligacoes: atual?.ligacoes ?? [] }
-      const n = board.cartoes.length
-      const doCap = board.cartoes.filter((c) => c.capitulo === p.file)
       const palavras = alvo.texto.split(/\s+/)
       const ligadas = p.fichas.filter((f) => alvo.ligadoA && alvo.ligadoA.toLowerCase().includes(f.nome.split(' ')[0]!.toLowerCase())).map((f) => f.id)
-      const cartao: Cartao = {
-        id: novoId('cartao'),
+      // gravado pelo main (enredo.adicionarCartao), que saneia o quadro e põe o cartão no fim do roteiro do capítulo
+      await call<Cartao>('enredo.adicionarCartao', p.dir, {
         tipo: CARTAO_DE[alvo.tipo] ?? 'ideia',
         titulo: palavras.slice(0, 7).join(' ') + (palavras.length > 7 ? '…' : ''),
         texto: alvo.texto,
         capitulo: p.file,
-        fichas: ligadas,
-        x: 60 + (n % 5) * 260,
-        y: 60 + Math.floor(n / 5) * 200,
-        ordem: doCap.length,
-        criadoEm: new Date().toISOString()
-      }
-      await folio.docs.put<EnredoBoard>(p.dir, 'enredo', 'board', { ...board, cartoes: [...board.cartoes, cartao] })
+        fichas: ligadas
+      })
       setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, noEnredo: true } : i)))
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))

@@ -21,16 +21,19 @@ export interface CoverResult {
   avisos: string[]
 }
 
-/** Páginas do miolo: última contagem conhecida ou compila para descobrir. */
+/**
+ * Páginas do miolo: a última contagem, se o miolo (texto e diagramação) não
+ * mudou desde então; senão compila para contar de novo (lombada sempre em dia).
+ */
 export async function mioloPages(dir: string, resourcesDir: string, fresh = false): Promise<number> {
+  const b = await prepareBook(dir, resourcesDir)
   if (!fresh) {
-    const last = await lastPageCount(dir)
+    const last = await lastPageCount(dir, b.fingerprint)
     if (last) return last
   }
-  const b = await prepareBook(dir, resourcesDir)
   await writeBookSource(b, 'contagem.typ')
   const { total } = await bookMap(b, 'contagem.typ')
-  await rememberPageCount(dir, total)
+  await rememberPageCount(dir, total, b.fingerprint)
   return total
 }
 

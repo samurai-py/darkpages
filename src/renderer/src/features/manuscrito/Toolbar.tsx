@@ -2,7 +2,8 @@ import { ATALHOS, novaFala } from './escrita'
 import type { Tela } from './ChapterEditor'
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
 import type { Editor } from '@tiptap/react'
-import { inserirCena, marcasKey } from './extensions'
+import { inserirCena, inserirFigura, inserirQuebraPagina, marcasKey } from './extensions'
+import { fileToDataUrl, folio } from '../../api'
 import { Ico } from './icones'
 
 export interface Visual {
@@ -27,6 +28,8 @@ interface Props {
   /** segundos restantes da ampulheta (null = parada) */
   restante: number | null
   onAmpulheta: () => void
+  /** abre o painel de Versões do capítulo */
+  onVersoes?: () => void
 }
 
 /** Re-renderiza quando o editor muda (seleção, marcas, decorações). */
@@ -54,6 +57,37 @@ export function Toolbar(p: Props): ReactElement {
     if (campo === 'corpoPx') v.corpoPx = Math.min(30, Math.max(13, v.corpoPx + delta))
     else v.linha = Math.round(Math.min(2.4, Math.max(1.1, v.linha + delta)) * 100) / 100
     p.onVisual(v)
+  }
+
+  const arquivo = useRef<HTMLInputElement>(null)
+  const [imgErro, setImgErro] = useState<string | null>(null)
+  const dirLivro = (e?.storage as { figura?: { dir?: string } } | undefined)?.figura?.dir ?? ''
+
+  /** Envia a imagem para <livro>/assets/ e insere a figura no cursor. */
+  const enviarImagem = async (file: File): Promise<void> => {
+    if (!e || !dirLivro) return
+    setImgErro(null)
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : null
+    if (!ext) {
+      setImgErro('Use PNG ou JPEG.')
+      return
+    }
+    const base =
+      file.name
+        .replace(/\.[^.]+$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'imagem'
+    const nome = `figura-${base}-${Date.now().toString(36)}.${ext}`
+    try {
+      await folio.assets.put(dirLivro, nome, await fileToDataUrl(file))
+      inserirFigura(e, `assets/${nome}`)
+    } catch (err) {
+      setImgErro(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const inserirNota = (): void => {
@@ -120,6 +154,43 @@ export function Toolbar(p: Props): ReactElement {
         <button
           type="button"
           className="ms-chip"
+          aria-label="Inserir quebra de página"
+          title="Quebra de página: o texto seguinte começa numa página nova no PDF, no EPUB e no DOCX"
+          disabled={!e}
+          onClick={() => e && inserirQuebraPagina(e)}
+        >
+          ⤓ Página
+        </button>
+        <button
+          type="button"
+          className="ms-chip"
+          disabled={!e || !dirLivro}
+          title="Imagem com legenda (PNG ou JPEG; para impressão, 300 dpi na largura do texto)"
+          onClick={() => arquivo.current?.click()}
+        >
+          ▣ Imagem
+        </button>
+        <input
+          ref={arquivo}
+          type="file"
+          accept="image/png,image/jpeg"
+          className="ms-sr"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(ev) => {
+            const f = ev.target.files?.[0]
+            ev.target.value = ''
+            if (f) void enviarImagem(f)
+          }}
+        />
+        {imgErro && (
+          <span className="err" role="alert" style={{ margin: 0, fontSize: 12 }}>
+            {imgErro}
+          </span>
+        )}
+        <button
+          type="button"
+          className="ms-chip"
           disabled={!e}
           title="Nova fala com travessão (Ctrl+Enter). Ou digite - e espaço no início do parágrafo."
           onClick={() => e && novaFala(e)}
@@ -173,6 +244,12 @@ export function Toolbar(p: Props): ReactElement {
           <Ico n="nota" size={14} />
           Nota
         </button>
+        {p.onVersoes && (
+          <button type="button" className="ms-chip" onClick={p.onVersoes} title="Versões guardadas deste capítulo: comparar e restaurar">
+            <Ico n="versoes" size={14} />
+            Versões
+          </button>
+        )}
         <span className="ms-sep" />
         <button type="button" className="ms-chip" aria-pressed={p.buscaAberta} onClick={() => p.onBusca(!p.buscaAberta)} title="Buscar (Ctrl+F)">
           <Ico n="busca" size={14} />

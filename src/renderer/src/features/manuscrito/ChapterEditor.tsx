@@ -7,7 +7,7 @@ import { Markdown } from 'tiptap-markdown'
 import type { EditorView } from '@tiptap/pm/view'
 import { call } from '../../api'
 import type { SinonimosResult } from '../../../../shared/models'
-import { BlocoAtual, Cena, Marcas, Nota, marcasKey, type Furo } from './extensions'
+import { BlocoAtual, Cena, Figura, Marcas, Nota, QuebraPagina, marcasKey, type Furo } from './extensions'
 import { analisarRepeticoes, contarRadical, fmt, manterCaixa, type Repeticao } from './texto'
 import { Ico } from './icones'
 import { RascunhoIa, docSemRascunho, markdownSemRascunho, temRascunho } from './rascunho'
@@ -27,6 +27,8 @@ export interface RascunhoUI {
 }
 
 interface Props {
+  /** pasta do livro (mostra e envia as imagens do texto) */
+  dir?: string
   /** Markdown inicial do capítulo (o editor é recriado a cada capítulo via `key`) */
   inicial: string
   rotulo: string
@@ -126,12 +128,15 @@ export function ChapterEditor(p: Props): ReactElement {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ horizontalRule: false, codeBlock: false, code: false, heading: false, bulletList: false, orderedList: false, listItem: false }),
+      // tachado desligado: a diagramação não imprime tachado (texto antigo com ~~ sai sem os tis)
+      StarterKit.configure({ horizontalRule: false, codeBlock: false, code: false, heading: false, bulletList: false, orderedList: false, listItem: false, strike: false }),
       EscritaLiteraria,
       Placeholder.configure({ placeholder: 'Comece a escrever…' }),
       Markdown.configure({ html: false, tightLists: true, linkify: false, breaks: false, transformPastedText: true }),
       Nota,
       Cena,
+      QuebraPagina,
+      Figura.configure({ dir: p.dir ?? '' }),
       Marcas,
       BlocoAtual,
       RascunhoIa

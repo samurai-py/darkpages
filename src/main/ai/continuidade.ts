@@ -1,4 +1,6 @@
 import type { Conflito, Ficha, Sugestao } from '../../shared/models'
+import type { ChapterKind } from '../../shared/types'
+import { numerarCapitulos } from '../../shared/rotulo'
 import { escaparRegex, numeroCapitulo, contexto, semAcento, type Troca } from './texto'
 import { mencoes, nomesDaFicha, type Mencao } from './contexto'
 
@@ -7,8 +9,77 @@ import { mencoes, nomesDaFicha, type Mencao } from './contexto'
  * 1. Atributos descritivos: campo "Olhos: verdes" na ficha × "olhos azuis"
  *    escrito perto do nome do personagem.
  * 2. Status: campo "Status: morto@cap12" × personagem com fala ou ação num
- *    capítulo de número maior (número pelo prefixo do arquivo, 013-x.md = 13).
+ *    capítulo posterior.
+ *
+ * Referência a capítulo nos campos da ficha (valor@...):
+ * - `@capN` (ou `@N`, `@cap. N`, `@capítulo N`) = o N-ésimo CAPÍTULO como a
+ *   tela mostra (prólogo e epílogo não contam). Ao reordenar ou mudar o tipo
+ *   dos capítulos, o app reescreve esses números nas fichas para continuarem
+ *   apontando para o mesmo capítulo (ver features/manuscrito.ts).
+ * - `@ch-xxxxxxxx` = id estável do capítulo (não depende da ordem).
+ * A comparação é pela posição no livro, não pelo número do arquivo.
  */
+
+/** Capítulo na ordem do livro (o que a checagem precisa de ChapterInfo). */
+export interface CapituloOrdem {
+  file: string
+  id: string
+  kind: ChapterKind
+}
+
+export type RefCapitulo = { tipo: 'numero'; n: number } | { tipo: 'id'; id: string }
+
+/** "@cap12", "@ 12", "@capítulo 12", "@ch-3f9a…" → referência; null se não há. */
+export const REF_CAPITULO = /@\s*(?:(ch-[a-z0-9]{6,32})|(cap(?:[ií]tulo)?\.?\s*)?(\d{1,3}))(?![\p{L}\p{N}])/iu
+
+export function lerRefCapitulo(m: RegExpMatchArray | null): RefCapitulo | null {
+  if (!m) return null
+  if (m[1]) return { tipo: 'id', id: m[1].toLowerCase() }
+  if (m[3]) return { tipo: 'numero', n: Number(m[3]) }
+  return null
+}
+
+/** Posição (índice na ordem do livro) do capítulo referido, ou -1. */
+export function posicaoDaRef(ref: RefCapitulo, caps: CapituloOrdem[]): number {
+  if (ref.tipo === 'id') return caps.findIndex((c) => c.id === ref.id)
+  const nums = numerarCapitulos(caps)
+  return nums.findIndex((n) => n === ref.n)
+}
+
+/** Mesma forma de REF_CAPITULO, para reescrever todas as ocorrências de um texto (não pega "x@12.com"). */
+const REF_CAPITULO_G = /@(\s*)(?:(ch-[a-z0-9]{6,32})|(cap(?:[ií]tulo)?\.?\s*)?(\d{1,3}))(?![\p{L}\p{N}]|\.[\p{L}\p{N}])/giu
+
+/**
+ * Reescreve as referências `@capN` de um valor de ficha depois que a
+ * numeração dos capítulos mudou (reordenar, mudar tipo, excluir). `antes` e
+ * `depois` são os capítulos em ordem, antes e depois da mudança. A referência
+ * continua no mesmo capítulo (pelo id); se ele deixou de ter número (virou
+ * prólogo/epílogo) ou foi excluído, vira `@ch-<id>` — a checagem passa a
+ * ignorá-la em vez de apontar para o capítulo errado. `@ch-…` não muda.
+ */
+export function remapearRefsCapitulo(valor: string, antes: CapituloOrdem[], depois: CapituloOrdem[]): string {
+  if (!valor.includes('@')) return valor
+  const numDepois = numerarCapitulos(depois)
+  return valor.replace(REF_CAPITULO_G, (todo, esp: string, id: string | undefined, prefixo: string | undefined, n: string | undefined) => {
+    if (id || !n) return todo
+    const iAntes = posicaoDaRef({ tipo: 'numero', n: Number(n) }, antes)
+    const cap = antes[iAntes]
+    if (!cap) return todo // número que não existia: deixa como o autor escreveu
+    const iDepois = depois.findIndex((c) => c.id === cap.id)
+    const novo = iDepois >= 0 ? numDepois[iDepois] : 0
+    if (!novo) return `@${esp}${cap.id}`
+    return `@${esp}${prefixo ?? ''}${novo}`
+  })
+}
+
+/** Como a tela chama o capítulo na posição i: "cap. 3", "prólogo", "epílogo". */
+export function nomeDaPosicao(i: number, caps: CapituloOrdem[]): string {
+  const c = caps[i]
+  if (!c) return 'este capítulo'
+  if (c.kind === 'prologo') return 'prólogo'
+  if (c.kind === 'epilogo') return 'epílogo'
+  return `cap. ${numerarCapitulos(caps)[i]}`
+}
 
 /** Vocabulário de cores/tons para comparar atributos sem falso positivo ("olhos cansados" não conta). */
 const TONS = [
@@ -88,16 +159,21 @@ const FALA = /^[\s,]*(?:—[^—\n]*—\s*)?(?:disse|diz|falou|fala|respondeu|re
 const ACAO = /^[\s,]*(?:se\s+)?\p{Ll}{3,}(?:ou|eu|iu|ava|ia)\b/u
 const MEMORIA = /lembr|mem[oó]ria|saudade|t[uú]mulo|enterr|funeral|morreu|morte|fantasma|esp[ií]rito|sonh|retrato|antes de morrer/i
 
-function statusMorto(f: Ficha): { cap: number; valor: string } | null {
+function statusMorto(f: Ficha): { ref: RefCapitulo; valor: string } | null {
   for (const c of Array.isArray(f.campos) ? f.campos : []) {
     if (!c?.nome || !c?.valor || !/^(status|estado)$/i.test(c.nome.trim())) continue
-    const m = c.valor.match(/^\s*(mort[oa]|falecid[oa]|destru[ií]d[oa])\s*@\s*(?:cap(?:[ií]tulo)?\.?\s*)?(\d{1,3})/i)
-    if (m?.[2]) return { cap: Number(m[2]), valor: c.valor.trim() }
+    const m = c.valor.match(/^\s*(?:mort[oa]|falecid[oa]|destru[ií]d[oa])\s*(@.*)$/iu)
+    const ref = lerRefCapitulo(m?.[1]?.match(new RegExp(`^${REF_CAPITULO.source}`, 'iu')) ?? null)
+    if (ref) return { ref, valor: c.valor.trim() }
   }
   return null
 }
 
-export function continuidadeDeterministica(texto: string, file: string, lista: Ficha[]): ConflitoComTroca[] {
+/**
+ * `capitulos` = capítulos do livro em ordem (Project.chapters). Sem ele (uso
+ * antigo), cai na regra antiga: número do prefixo do arquivo.
+ */
+export function continuidadeDeterministica(texto: string, file: string, lista: Ficha[], capitulos?: CapituloOrdem[]): ConflitoComTroca[] {
   const out: ConflitoComTroca[] = []
   const todas = mencoes(texto, lista)
 
@@ -130,11 +206,21 @@ export function continuidadeDeterministica(texto: string, file: string, lista: F
   }
 
   // 2) status morto@capN × fala/ação em capítulo posterior
-  const atual = numeroCapitulo(file)
+  const idxAtual = capitulos ? capitulos.findIndex((c) => c.file === file) : -1
+  const atual = capitulos ? nomeDaPosicao(idxAtual, capitulos) : `cap. ${numeroCapitulo(file)}`
+  /** o capítulo atual vem depois do capítulo da referência? */
+  const depoisDe = (ref: RefCapitulo): boolean => {
+    if (capitulos) {
+      const morte = posicaoDaRef(ref, capitulos)
+      return idxAtual >= 0 && morte >= 0 && idxAtual > morte
+    }
+    const n = numeroCapitulo(file)
+    return ref.tipo === 'numero' && n > 0 && n > ref.n
+  }
   const jaAvisado = new Set<string>()
   for (const f of lista) {
     const st = statusMorto(f)
-    if (!st || !atual || atual <= st.cap || jaAvisado.has(f.id)) continue
+    if (!st || !depoisDe(st.ref) || jaAvisado.has(f.id)) continue
     for (const nome of nomesDaFicha(f)) {
       const re = new RegExp(`(?<![\\p{L}\\p{N}])${escaparRegex(nome)}(?![\\p{L}\\p{N}])`, 'gu')
       for (const m of texto.matchAll(re)) {
@@ -158,7 +244,7 @@ export function continuidadeDeterministica(texto: string, file: string, lista: F
           fichaNome: f.nome,
           campo: 'Status',
           esperado: st.valor,
-          encontrado: fala ? `fala no cap. ${atual}` : `age no cap. ${atual}`,
+          encontrado: fala ? `fala no ${atual}` : `age no ${atual}`,
           explicacao: `${f.nome} está marcado como ${st.valor}, mas ${fala ? 'fala' : 'age'} neste capítulo (${atual}). Se for lembrança ou flashback, ignore.`
         })
         break

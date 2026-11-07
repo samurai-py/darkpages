@@ -13,6 +13,7 @@ import { Icon } from '../icons'
 import { useAutosave, type SaveState } from '../useAutosave'
 import { ChapterEditor } from '../features/manuscrito/ChapterEditor'
 import { ChapterList, rotuloLongo, type Metas } from '../features/manuscrito/ChapterList'
+import { lerMetas, METAS_PADRAO, salvarMetas as salvarMetasLivro } from '../features/manuscrito/metas'
 import { Toolbar, mmss, type Visual } from '../features/manuscrito/Toolbar'
 import { Inspector } from '../features/manuscrito/Inspector'
 import { Exportar, Importar } from '../features/manuscrito/ImportExport'
@@ -20,6 +21,7 @@ import { Ico } from '../features/manuscrito/icones'
 import { fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '../features/manuscrito/texto'
 import type { Furo } from '../features/manuscrito/extensions'
 import { NomeCapitulos } from '../features/manuscrito/NomeCapitulos'
+import { Versoes } from '../features/versoes/Versoes'
 import { resolveRotulo } from '../../../shared/rotulo'
 import { SyncStatus } from '../features/sync/SyncStatus'
 import { SpotifyPlayer } from '../features/spotify/Player'
@@ -29,6 +31,8 @@ interface RascunhoEstado extends RascunhoUI {
   file: string
   ideia: { tipo: string; texto: string }
   ponto: PontoInsercao
+  /** insight que pediu o rascunho ("Escrever no texto" do painel): vira "aplicado" só ao Aceitar */
+  insightId?: string
 }
 
 interface Draft {
@@ -56,7 +60,6 @@ const VISUAL_PADRAO: Visual & Tela & { repeticoes: boolean; focoMin: number } = 
   maquina: false,
   focoParagrafo: false
 }
-const METAS_PADRAO: Metas = { metaCapitulo: 3000, metaLivro: 80000 }
 
 function lerVisual(): typeof VISUAL_PADRAO {
   try {
@@ -151,7 +154,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const [checando, setChecando] = useState(false)
   const [erroCont, setErroCont] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [modal, setModal] = useState<'importar' | 'exportar' | 'rotulo' | null>(null)
+  const [modal, setModal] = useState<'importar' | 'exportar' | 'rotulo' | 'versoes' | 'lixeira' | null>(null)
 
   const root = useRef<HTMLDivElement>(null)
   const bodyRef = useRef('')
@@ -250,9 +253,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
       .list<Ficha>(dir, 'universo')
       .then((l) => alive && setFichas(l.filter((f) => f && typeof f.nome === 'string')))
       .catch(() => alive && setFichas([]))
-    folio.docs
-      .get<Metas>(dir, 'escrita', 'metas')
-      .then((m) => alive && m && setMetas({ ...METAS_PADRAO, ...m }))
+    lerMetas(dir)
+      .then((m) => alive && setMetas({ ...METAS_PADRAO, ...m }))
       .catch(() => undefined)
     return () => {
       alive = false
@@ -361,7 +363,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     }, 60)
   }
 
-  const redigir = async (ideia: { tipo: string; texto: string }, usarCursor: boolean): Promise<void> => {
+  const redigir = async (ideia: { tipo: string; texto: string }, usarCursor: boolean, insightId?: string): Promise<void> => {
     const ed = editorRef.current
     const file = currentRef.current
     if (!ed || ed.isDestroyed || !file) throw new Error('Abra um capítulo primeiro.')
@@ -382,7 +384,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
       const id = `r${Date.now().toString(36)}`
       // o autor pode ter digitado enquanto a IA escrevia: recalcula o ponto
       if (!inserirRascunho(atual, r.texto, id, pontoDeInsercao(atual, usarCursor && teveFoco.current))) throw new Error('A IA não devolveu texto aproveitável.')
-      setRascunho({ id, file, ideia, ponto, carregando: false, erro: null })
+      setRascunho({ id, file, ideia, ponto, carregando: false, erro: null, ...(insightId ? { insightId } : {}) })
       mostrarRascunho(id)
     } finally {
       fecharToast('redigir')
@@ -395,6 +397,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     if (!ed || !r) return
     aceitarRascunho(ed, r.id)
     setRascunho(null)
+    if (r.insightId) void insightsStore.marcar(r.insightId, 'aplicado').catch(() => undefined)
   }
 
   const descartar = (): void => {
@@ -434,7 +437,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
         const ins = await folio.docs.get<Insight>(dir, 'insights', id)
         if (!ins) throw new Error('Esse insight não existe mais.')
         const ideia = ins.acao?.tipo === 'redigir' ? ins.acao.ideia : { tipo: ins.tipo, texto: ins.texto }
-        await redigir(ideia, false)
+        await redigir(ideia, false, id)
       } catch (e) {
         toast({ id: 'redigir-erro', tipo: 'erro', titulo: 'Não deu para escrever no texto', texto: msg(e) })
       }
@@ -508,12 +511,12 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     const p = await call<Project>('manuscrito.excluir', dir, file)
     onProject(p)
     if (file === current) setCurrent(p.chapters[Math.min(i, p.chapters.length - 1)]?.file ?? null)
-    toast({ id: `del-${file}`, tipo: 'info', titulo: 'Capítulo excluído', texto: 'Ele foi para .arca/lixeira dentro da pasta do livro.' })
+    toast({ id: `del-${file}`, tipo: 'info', titulo: 'Capítulo excluído', texto: 'Ele foi para a lixeira da Arca. Para trazê-lo de volta: menu da coluna › Lixeira…' })
   }
 
   const salvarMetas = (m: Metas): void => {
     setMetas(m)
-    folio.docs.put(dir, 'escrita', 'metas', m).catch((e: unknown) => toast({ id: 'metas', tipo: 'erro', titulo: 'Metas não salvas', texto: msg(e) }))
+    salvarMetasLivro(dir, m).catch((e: unknown) => toast({ id: 'metas', tipo: 'erro', titulo: 'Metas não salvas', texto: msg(e) }))
   }
 
   // ------------------------------------------------------------ continuidade
@@ -660,6 +663,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           onExportar={() => setModal('exportar')}
           rotulo={rotuloCfg}
           onNomeCapitulos={() => setModal('rotulo')}
+          onLixeira={() => setModal('lixeira')}
         />
       )}
 
@@ -684,6 +688,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
             }}
             restante={restante}
             onAmpulheta={alternarAmpulheta}
+            onVersoes={() => setModal('versoes')}
           />
         )}
 
@@ -692,6 +697,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           {chapter && current === chapter.file ? (
             <ChapterEditor
               key={`${chapter.file}#${carga}`}
+              dir={project.dir}
               inicial={chapter.body}
               rotulo={rotulo}
               titulo={title}
@@ -842,6 +848,29 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
               if (criados[0]) setCurrent(criados[0])
               toast({ id: 'imp', tipo: 'info', titulo: 'Importação concluída', texto: `${criados.length} ${criados.length === 1 ? 'capítulo entrou' : 'capítulos entraram'} no fim do livro.` })
             })
+          }}
+        />
+      )}
+      {(modal === 'versoes' || modal === 'lixeira') && (
+        <Versoes
+          dir={dir}
+          file={current}
+          nomeCapitulo={[rotulo, title.trim()].filter(Boolean).join(' · ')}
+          aba={modal === 'lixeira' ? 'lixeira' : 'capitulo'}
+          antes={flushAll}
+          onClose={() => setModal(null)}
+          onRestaurado={(p, cap) => {
+            onProject(p)
+            setModal(null)
+            // recarrega o capítulo no editor (nova "carga" remonta o ChapterEditor)
+            if (cap.file === currentRef.current) setRecarga((n) => n + 1)
+            toast({ id: 'restaurado', tipo: 'info', titulo: 'Versão restaurada', texto: 'O texto anterior ficou guardado na Arca, como “antes de restaurar”.' })
+          }}
+          onRecuperado={(p, arquivo, titulo) => {
+            onProject(p)
+            setModal(null)
+            void switchTo(arquivo)
+            toast({ id: 'recuperado', tipo: 'info', titulo: 'Capítulo recuperado', texto: `“${titulo}” voltou para o fim do livro.` })
           }}
         />
       )}

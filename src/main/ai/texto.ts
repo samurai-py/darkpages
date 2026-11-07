@@ -67,6 +67,8 @@ export interface Troca {
 export interface ResultadoTroca {
   texto: string
   aplicadas: number
+  /** índices (em `trocas`) das que foram aplicadas */
+  aplicadasIdx: number[]
   falhas: Array<{ original: string; motivo: string }>
 }
 
@@ -79,8 +81,9 @@ export interface ResultadoTroca {
 export function aplicarTrocas(texto: string, trocas: Troca[]): ResultadoTroca {
   let t = texto
   let aplicadas = 0
+  const aplicadasIdx: number[] = []
   const falhas: ResultadoTroca['falhas'] = []
-  for (const tr of trocas) {
+  for (const [idx, tr] of trocas.entries()) {
     if (!tr.original) {
       falhas.push({ original: tr.original, motivo: 'Trecho original vazio.' })
       continue
@@ -110,8 +113,32 @@ export function aplicarTrocas(texto: string, trocas: Troca[]): ResultadoTroca {
     }
     t = t.slice(0, alvo) + tr.substituto + t.slice((alvo as number) + tr.original.length)
     aplicadas++
+    aplicadasIdx.push(idx)
   }
-  return { texto: t, aplicadas, falhas }
+  return { texto: t, aplicadas, aplicadasIdx, falhas }
+}
+
+/**
+ * Depois que o texto mudou (outra sugestão aplicada, edição do autor), confere
+ * cada sugestão restante: fica só a que ainda pode ser aplicada com segurança.
+ * - original + contexto ainda no texto: fica como está;
+ * - contexto mudou, mas o original aparece uma vez só: fica, com o contexto
+ *   (antes/depois) recalculado;
+ * - original sumiu, ou repete sem contexto que desempate: sai.
+ */
+export function revalidarTrocas<T extends Troca>(texto: string, lista: T[]): T[] {
+  const out: T[] = []
+  for (const s of lista) {
+    if (!s.original) continue
+    const pos = ocorrencias(texto, s.original)
+    if (!pos.length) continue
+    const a = s.antes ?? ''
+    const d = s.depois ?? ''
+    const comCtx = pos.some((p) => texto.slice(p - a.length, p) === a && texto.slice(p + s.original.length, p + s.original.length + d.length) === d)
+    if (comCtx) out.push(s)
+    else if (pos.length === 1) out.push({ ...s, ...contexto(texto, pos[0] as number, s.original.length) })
+  }
+  return out
 }
 
 /** Divide texto longo em pedaços por parágrafo (para mandar à IA sem cortar no meio). */
@@ -138,9 +165,4 @@ export function pedacos(texto: string, max: number): string[] {
 export function numeroCapitulo(file: string): number {
   const n = Number.parseInt(file.slice(0, 3), 10)
   return Number.isFinite(n) ? n : 0
-}
-
-/** id de documento a partir do arquivo do capítulo (014-x.md → 014-x). */
-export function idCapitulo(file: string): string {
-  return file.replace(/\.md$/, '')
 }

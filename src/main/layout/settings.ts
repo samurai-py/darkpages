@@ -11,7 +11,7 @@ import {
 
 /** LayoutSettings com todos os campos opcionais preenchidos. */
 export type FullLayout = Required<LayoutSettings> & {
-  front: FrontMatter
+  front: Required<FrontMatter>
   cover: CoverSettings
   chapters: Record<string, ChapterLayout>
 }
@@ -24,8 +24,8 @@ function color(v: unknown, fallback: string): string {
 
 /** Completa um LayoutSettings (vindo do projeto.yaml, talvez antigo) com os padrões. */
 export function resolveLayout(l: LayoutSettings): FullLayout {
-  const d = DEFAULT_LAYOUT as Required<LayoutSettings> & { front: FrontMatter; cover: CoverSettings }
-  const front = { ...d.front, ...(l.front ?? {}) }
+  const d = DEFAULT_LAYOUT as Required<LayoutSettings> & { front: Required<FrontMatter>; cover: CoverSettings }
+  const front: Required<FrontMatter> = { ...d.front, ...(l.front ?? {}) } as Required<FrontMatter>
   const cover = { ...d.cover, ...(l.cover ?? {}) }
   return {
     ...d,

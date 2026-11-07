@@ -10,6 +10,7 @@ import { handlers as idioma } from '../features/idioma'
 import { handlers as sync } from '../features/sync'
 import { handlers as arte } from '../features/arte'
 import { handlers as insights } from '../features/insights'
+import { handlers as versoes } from '../features/versoes'
 
 /** Todos os métodos da API, iguais no desktop (IPC) e no web (HTTP). */
 export const registry: Handlers = {
@@ -23,7 +24,8 @@ export const registry: Handlers = {
   ...idioma,
   ...sync,
   ...arte,
-  ...insights
+  ...insights,
+  ...versoes
 }
 
 export async function dispatch(ctx: Ctx, method: string, args: unknown[]): Promise<unknown> {

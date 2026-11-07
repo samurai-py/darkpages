@@ -1,13 +1,14 @@
 import type { Ctx } from '../api/context'
 import { openProject, readChapter } from '../project'
-import { getDoc, listDocs, putDoc } from '../store/docs'
+import { getDoc, listDocs } from '../store/docs'
+import { getDocCapitulo, putDocCapitulo } from '../store/capitulo-docs'
 import type { Cartao, EnredoBoard, Ficha } from '../../shared/models'
 import { aiChat } from './index'
-import { hashTexto, idCapitulo, regexNome } from './texto'
+import { hashTexto, regexNome } from './texto'
 
 /**
  * Monta o contexto que a IA recebe: capítulo, resumos dos anteriores
- * (cacheados na coleção "resumos" por hash do texto), fichas citadas
+ * (cacheados na coleção "resumos" por hash do texto, chave = id estável do capítulo), fichas citadas
  * (coleção "universo", detecção por nome/apelidos) e cartões do Enredo
  * ligados ao capítulo (coleção "enredo", doc "board").
  */
@@ -27,8 +28,7 @@ const SISTEMA_RESUMO =
 export async function resumoCapitulo(ctx: Ctx, dir: string, file: string): Promise<string> {
   const cap = await readChapter(dir, file)
   const hash = hashTexto(cap.body)
-  const id = idCapitulo(file)
-  const cache = await getDoc<ResumoDoc>(dir, 'resumos', id)
+  const cache = await getDocCapitulo<ResumoDoc>(dir, 'resumos', file, cap.id)
   if (cache && cache.hash === hash && cache.resumo) return cache.resumo
   if (!cap.body.trim()) return ''
   const resumo = (
@@ -40,7 +40,7 @@ export async function resumoCapitulo(ctx: Ctx, dir: string, file: string): Promi
       esforco: 'low'
     })
   ).trim()
-  await putDoc<ResumoDoc>(dir, 'resumos', id, { hash, resumo, titulo: cap.title, geradoEm: new Date().toISOString() })
+  await putDocCapitulo<ResumoDoc>(dir, 'resumos', file, { hash, resumo, titulo: cap.title, geradoEm: new Date().toISOString() }, cap.id)
   return resumo
 }
 
@@ -67,7 +67,7 @@ export async function resumosAnteriores(ctx: Ctx, dir: string, file: string): Pr
   for (const c of [...anteriores].reverse()) {
     if (!c.words) continue
     const cap = await readChapter(dir, c.file)
-    const cache = await getDoc<ResumoDoc>(dir, 'resumos', idCapitulo(c.file))
+    const cache = await getDocCapitulo<ResumoDoc>(dir, 'resumos', c.file, c.id)
     let resumo = ''
     if (cache && cache.hash === hashTexto(cap.body)) resumo = cache.resumo
     else if (novos < MAX_RESUMOS_NOVOS) {

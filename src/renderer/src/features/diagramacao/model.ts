@@ -17,7 +17,7 @@ export type { EpubResult } from '../../../../main/layout/epub'
 export type { ItemChecagem, Nivel } from '../../../../main/layout/preflight'
 export type { FonteDisponivel } from '../../../../main/layout/fonts'
 
-export type FullLayout = Required<LayoutSettings> & { front: FrontMatter; cover: CoverSettings }
+export type FullLayout = Required<LayoutSettings> & { front: Required<FrontMatter>; cover: CoverSettings }
 
 const D = DEFAULT_LAYOUT as FullLayout
 
@@ -92,6 +92,58 @@ export function spine(pages: number, caliperMm: number): number {
 
 export function fmt(n: number, digits = 1): string {
   return n.toLocaleString('pt-BR', { maximumFractionDigits: digits })
+}
+
+// ---------------------------------------------------------------- modelos de estilo
+
+/** Seção das configurações globais (settings.json) com os modelos de estilo, válidos para todos os livros. */
+export const MODELOS_SECAO = 'modelos-layout'
+
+export interface ModeloLayout {
+  nome: string
+  criadoEm: string
+  /** LayoutSettings sem o que é conteúdo do livro (ajustes por capítulo, ISBN, textos, sinopse…) */
+  layout: LayoutSettings
+}
+
+/** Campos das páginas iniciais/finais que são texto do livro e não entram no modelo. */
+const FRONT_CONTEUDO: Array<keyof FrontMatter> = [
+  'subtitulo',
+  'editora',
+  'cidade',
+  'ano',
+  'edicao',
+  'isbn',
+  'ficha',
+  'creditosTexto',
+  'dedicatoriaTexto',
+  'epigrafeTexto',
+  'epigrafeAutor',
+  'colofaoTexto',
+  'posfacioTexto',
+  'agradecimentosTexto',
+  'sobreAutorTexto',
+  'sobreAutorFoto'
+]
+
+/** Estilo reutilizável: o layout do livro menos os ajustes por capítulo e os textos próprios do livro. */
+export function modeloDe(l: FullLayout): LayoutSettings {
+  const { chapters: _c, front, cover, ...resto } = l
+  const f: Partial<FrontMatter> = { ...front }
+  for (const k of FRONT_CONTEUDO) delete f[k]
+  const { sinopse: _s, ...capa } = cover
+  return { ...resto, front: f as FrontMatter, cover: capa as CoverSettings }
+}
+
+/** Aplica um modelo ao livro, mantendo os ajustes por capítulo e os textos do livro. */
+export function aplicarModelo(l: FullLayout, m: LayoutSettings): FullLayout {
+  const base = withDefaults({ ...l, ...m, chapters: l.chapters })
+  return {
+    ...base,
+    chapters: l.chapters,
+    front: { ...l.front, ...(m.front ?? {}) },
+    cover: { ...l.cover, ...(m.cover ?? {}), sinopse: l.cover.sinopse }
+  }
 }
 
 export function errText(e: unknown): string {

@@ -8,11 +8,8 @@ import { Semana } from '../features/sync/biblioteca/Semana'
 import { Norte } from '../features/sync/biblioteca/Norte'
 import { Inspiracoes } from '../features/sync/biblioteca/Inspiracoes'
 import { Trilha } from '../features/sync/biblioteca/Trilha'
+import { lerMetas, salvarMetas } from '../features/manuscrito/metas'
 import './biblioteca.css'
-
-interface Metas {
-  palavras?: number
-}
 
 interface Featured {
   project: Project
@@ -72,10 +69,11 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
         const [destaque, diario, metas] = await Promise.all([
           bibliotecaApi.destaque(project.dir).catch(() => null),
           bibliotecaApi.registrar(project.dir).catch(() => ({ dias: {} })),
-          folio.docs.get<Metas>(project.dir, 'config', 'metas').catch(() => null)
+          lerMetas(project.dir).catch(() => null)
         ])
         if (!vivo) return
-        setFeat({ project, destaque, dias: diario.dias, meta: typeof metas?.palavras === 'number' ? metas.palavras : null })
+        // mesma meta do livro que o Manuscrito mostra (escrita/metas.metaLivro)
+        setFeat({ project, destaque, dias: diario.dias, meta: metas?.metaLivro ? metas.metaLivro : null })
       } catch (e) {
         if (vivo) setFeatErro(`Não deu para abrir “${first.title}”: ${errMsg(e)}`)
       }
@@ -130,8 +128,7 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
     if (!feat) return
     const n = Math.round(Number(metaIn.replace(/\D/g, '')))
     try {
-      if (n > 0) await folio.docs.put<Metas>(feat.project.dir, 'config', 'metas', { palavras: n })
-      else await folio.docs.delete(feat.project.dir, 'config', 'metas')
+      await salvarMetas(feat.project.dir, { metaLivro: n > 0 ? n : 0 })
       setFeat({ ...feat, meta: n > 0 ? n : null })
       setEditMeta(false)
     } catch (err) {

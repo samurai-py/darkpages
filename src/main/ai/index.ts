@@ -299,6 +299,26 @@ export function extractJson<T>(text: string): T {
   }
 }
 
+/** Teto da janela de contexto pedida ao Ollama (memória da máquina). */
+export const OLLAMA_CTX_MAX = 32768
+
+/**
+ * Estimativa de tokens a partir de caracteres. Português dá ~3,5–4 caracteres
+ * por token; 3 erra para mais de propósito (melhor avisar cedo que cortar).
+ */
+export function estimarTokens(caracteres: number): number {
+  return Math.ceil(caracteres / 3)
+}
+
+export function avisoContextoGrande(necessario: number, limite: number): string {
+  const fmt = (n: number): string => n.toLocaleString('pt-BR')
+  return (
+    `O pedido ficou grande demais para a IA local: cerca de ${fmt(necessario)} tokens, e o limite configurado é ${fmt(limite)}. ` +
+    'Para não cortar parte do texto sem avisar, o Folio não enviou. Tente um capítulo menor (divida-o), ' +
+    'ou use um provedor na nuvem em Ajustes → IA, que aceita textos maiores.'
+  )
+}
+
 /** Claude 4.6+ aceita output_config.effort; modelos antigos dão erro com ele. */
 function aceitaEsforco(model: string): boolean {
   return /^claude-(opus|sonnet|haiku|fable|mythos)-(5|4-[6-9])/.test(model)
@@ -327,7 +347,10 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
       const model = checaModelo(s.ollamaModel, 'Ollama')
       const timeoutMs = req.timeoutMs ?? 300_000
       // janela de contexto suficiente para o capítulo inteiro (padrão do Ollama é pequeno e corta o texto)
-      const numCtx = Math.min(32768, Math.max(4096, Math.ceil(tamanho / 3) + maxTokens + 512))
+      const necessario = estimarTokens(tamanho) + maxTokens + 512
+      // acima do teto o Ollama cortaria o começo do pedido em silêncio (instruções e contexto somem): avisa em vez disso
+      if (necessario > OLLAMA_CTX_MAX) throw new Error(avisoContextoGrande(necessario, OLLAMA_CTX_MAX))
+      const numCtx = Math.max(4096, necessario)
       let r: Resposta
       try {
         r = await postar(

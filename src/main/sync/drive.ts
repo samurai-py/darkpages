@@ -1,5 +1,6 @@
 import { extname } from 'node:path'
-import { call, HttpError, request } from './net'
+import { AuthError, call, HttpError, request } from './net'
+import { ESCOPO_FALTANDO } from './google'
 import type { Remote, RemoteFile } from './remote'
 
 /**
@@ -75,6 +76,10 @@ export class DriveRemote implements Remote {
         if (e instanceof HttpError && e.status === 401 && attempt === 0) {
           this.onUnauthorized()
           continue
+        }
+        // token sem o escopo do Drive (permissão desmarcada no consentimento): reconectar resolve
+        if (e instanceof HttpError && e.status === 403 && /insufficient.*scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(JSON.stringify(e.body ?? ''))) {
+          throw new AuthError(ESCOPO_FALTANDO)
         }
         throw e
       }

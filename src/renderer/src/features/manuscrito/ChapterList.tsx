@@ -29,6 +29,8 @@ interface Props {
   rotulo: RotuloCfg
   /** abre o seletor "Nome dos capítulos…" */
   onNomeCapitulos: () => void
+  /** abre a lixeira (Versões) para recuperar capítulos excluídos */
+  onLixeira?: () => void
 }
 
 /** Número curto na coluna (algarismo, ou romano quando o livro usa romanos). */
@@ -132,6 +134,11 @@ export function ChapterList(p: Props): ReactElement {
               <button type="button" role="menuitem" onClick={() => (setMenuCol(false), p.onNomeCapitulos())}>
                 <Ico n="lapis" size={14} /> Nome dos capítulos…
               </button>
+              {p.onLixeira && (
+                <button type="button" role="menuitem" onClick={() => (setMenuCol(false), p.onLixeira?.())}>
+                  <Ico n="lixeira" size={14} /> Lixeira…
+                </button>
+              )}
             </div>
           )}
         </span>
@@ -360,7 +367,7 @@ function ConfirmaExcluir({ cap, onCancel, onOk }: { cap: ChapterInfo; onCancel: 
     <>
       <p className="ms-modal-p">
         Excluir <b>“{cap.title}”</b> ({fmt(cap.words)} palavras)? O arquivo sai do livro e vai para a lixeira da Arca
-        (<code>.arca/lixeira</code>), de onde pode ser recuperado à mão.
+        (<code>.arca/lixeira</code>), de onde pode ser recuperado em <b>Lixeira…</b>, no menu da coluna.
       </p>
       <div className="ms-row">
         <button ref={cancel} type="button" className="btn sm" onClick={onCancel}>

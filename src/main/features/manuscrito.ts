@@ -9,9 +9,13 @@ import {
   saveLayout,
   updateChapterMeta
 } from '../project'
-import { assetFilePath, getDoc, newId, putDoc } from '../store/docs'
-import { ASSET_NAMES, type CenaMeta, type EnredoBoard } from '../../shared/models'
-import type { ChapterKind, Project } from '../../shared/types'
+import { snapshotAgora } from '../arca'
+import { assetFilePath, deleteDoc, getDoc, listDocs, newId, putDoc } from '../store/docs'
+import { migrarDocsLegados } from '../store/capitulo-docs'
+import { remapearRefsCapitulo } from '../ai/continuidade'
+import { esquecerGeracoes } from './arte'
+import { ASSET_NAMES, type CenaMeta, type EnredoBoard, type Ficha, type Insight } from '../../shared/models'
+import type { ChapterInfo, ChapterKind, Project } from '../../shared/types'
 import { exportar, type FormatoExport } from './manuscrito-exportar'
 import { lerArquivo, previa, type CapImportado, type PreviaImport } from './manuscrito-importar'
 
@@ -63,9 +67,15 @@ async function exists(p: string): Promise<boolean> {
 }
 
 /**
- * Depois de renomear capítulos, atualiza as referências por nome de arquivo
- * que outras features guardam: cartões do Enredo, arte de abertura e ajustes
- * de diagramação por capítulo.
+ * Depois de renomear capítulos (reordenar), atualiza as referências por nome
+ * de arquivo que outras features guardam: cartões do Enredo, insights, arte de
+ * abertura (imagem e metadados de geração) e ajustes de diagramação por
+ * capítulo.
+ *
+ * O que NÃO precisa de remapeamento: resumos, leitura beta, revisão e estado
+ * dos insights (chave = id estável do capítulo, ver store/capitulo-docs.ts) e
+ * "foi de propósito" (`ignorados`, no front-matter do próprio capítulo).
+ * As referências `@capN` nas fichas são tratadas em `remapearFichas`.
  */
 async function remapearReferencias(dir: string, mapa: Record<string, string>): Promise<void> {
   if (Object.keys(mapa).length === 0) return
@@ -90,12 +100,56 @@ async function remapearReferencias(dir: string, mapa: Record<string, string>): P
   for (const [origem] of artes) await rename(origem, `${origem}.reord`)
   for (const [origem, destino] of artes) await rename(`${origem}.reord`, destino)
 
+  // metadados de geração da abertura (coleção "arte", doc gen-abertura-<arquivo>)
+  const geracoes = (await listDocs<Record<string, unknown>>(dir, 'arte')).filter((g) => g.id.startsWith('gen-abertura-'))
+  const mover: Array<{ velho: string; novo: string; doc: Record<string, unknown> }> = []
+  for (const g of geracoes) {
+    const de = `${g.id.slice('gen-abertura-'.length)}.md`
+    const para = mapa[de]
+    if (!para) continue
+    const { id: _id, ...resto } = g
+    mover.push({
+      velho: g.id,
+      novo: `gen-abertura-${para.replace(/\.md$/, '')}`,
+      doc: { ...resto, chave: `abertura:${para}`, alvo: { tipo: 'abertura', chapterFile: para }, asset: ASSET_NAMES.abertura(para) }
+    })
+  }
+  for (const m of mover) await deleteDoc(dir, 'arte', m.velho)
+  for (const m of mover) await putDoc(dir, 'arte', m.novo, m.doc)
+  if (mover.length) esquecerGeracoes(dir)
+
+  // insights: o capítulo de cada um
+  for (const i of await listDocs<Insight>(dir, 'insights')) {
+    const novo = i.capitulo ? mapa[i.capitulo] : undefined
+    if (novo) await putDoc(dir, 'insights', i.id, { ...i, capitulo: novo })
+  }
+
   const p = await openProject(dir)
   const porCap = p.meta.layout.chapters
   if (porCap && Object.keys(porCap).some((k) => k in mapa)) {
     const novo: typeof porCap = {}
     for (const [k, v] of Object.entries(porCap)) novo[mapa[k] ?? k] = v
     await saveLayout(dir, { ...p.meta.layout, chapters: novo })
+  }
+}
+
+/**
+ * Fichas: reescreve `@capN` (número exibido do capítulo) para continuar
+ * apontando para o mesmo capítulo depois de uma mudança na numeração.
+ * Ver remapearRefsCapitulo em ai/continuidade.ts.
+ */
+async function remapearFichas(dir: string, antes: ChapterInfo[], depois: ChapterInfo[]): Promise<void> {
+  for (const f of await listDocs<Ficha>(dir, 'universo')) {
+    if (!Array.isArray(f.campos)) continue
+    let mudou = false
+    const campos = f.campos.map((c) => {
+      if (!c || typeof c.valor !== 'string') return c
+      const valor = remapearRefsCapitulo(c.valor, antes, depois)
+      if (valor === c.valor) return c
+      mudou = true
+      return { ...c, valor }
+    })
+    if (mudou) await putDoc(dir, 'universo', f.id, { ...f, campos, atualizadoEm: new Date().toISOString() })
   }
 }
 
@@ -116,8 +170,11 @@ export const handlers: Handlers = {
   /** Marca como capítulo, prólogo ou epílogo. → Project */
   'manuscrito.tipo': async (ctx, dir, f, k) => {
     const d = await bookDir(ctx, dir)
+    const antes = (await openProject(d)).chapters
     await updateChapterMeta(d, file(f), { tipo: kind(k) })
-    return reabrir(ctx, d)
+    const p = await reabrir(ctx, d)
+    await remapearFichas(d, antes, p.chapters)
+    return p
   },
 
   /** Grava CenaMeta no front-matter (substitui o bloco "cena"). → ChapterContent */
@@ -145,16 +202,24 @@ export const handlers: Handlers = {
     const d = await bookDir(ctx, dir)
     if (!Array.isArray(ordem) || ordem.length > 999) throw new Error('Ordem inválida')
     const lista = ordem.map((x) => file(x))
+    const antes = (await openProject(d)).chapters
+    // documentos ainda chaveados pelo nome do arquivo vão para o id enquanto o nome vale
+    await migrarDocsLegados(d, antes)
     const renomeados = await reorderChapters(d, lista)
     await remapearReferencias(d, renomeados)
-    return { project: await reabrir(ctx, d), renomeados }
+    const project = await reabrir(ctx, d)
+    await remapearFichas(d, antes, project.chapters)
+    return { project, renomeados }
   },
 
   /** Move o capítulo para .arca/lixeira/. → Project */
   'manuscrito.excluir': async (ctx, dir, f) => {
     const d = await bookDir(ctx, dir)
+    const antes = (await openProject(d)).chapters
     await deleteChapter(d, file(f))
-    return reabrir(ctx, d)
+    const p = await reabrir(ctx, d)
+    await remapearFichas(d, antes, p.chapters)
+    return p
   },
 
   /** Lê .docx/.txt/.md (data URL) e devolve a prévia da divisão em capítulos. → PreviaImport */
@@ -186,6 +251,7 @@ export const handlers: Handlers = {
       caps = caps.filter((_, i) => idx.has(i))
     }
     if (caps.length === 0) throw new Error('Nenhum capítulo selecionado')
+    await snapshotAgora(d, 'antes de importar')
     const criados = await appendChapters(d, caps)
     pendentes.delete(str(id, 100))
     return { project: await reabrir(ctx, d), criados }

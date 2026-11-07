@@ -94,6 +94,25 @@ export interface FrontMatter {
   epigrafeTexto: string
   epigrafeAutor: string
   colofaoTexto: string
+  // ---- páginas finais (opcionais em livros antigos; padrão em DEFAULT_LAYOUT) ----
+  posfacio?: boolean
+  /** texto do posfácio (Markdown simples: parágrafos, itálico, notas) */
+  posfacioTexto?: string
+  agradecimentos?: boolean
+  agradecimentosTexto?: string
+  sobreAutor?: boolean
+  sobreAutorTexto?: string
+  /** foto do autor em <livro>/assets/ (png ou jpg), ou vazio */
+  sobreAutorFoto?: string
+}
+
+/** Perfil de saída do PDF do miolo. */
+export type PerfilPdf = 'grafica' | 'kdp' | 'tela'
+
+/** Epígrafe de abertura de um capítulo (front-matter "epigrafe" do capítulo). DONO: Diagramação */
+export interface EpigrafeCap {
+  texto: string
+  autor?: string
 }
 
 export interface CoverSettings {
@@ -118,8 +137,10 @@ export interface ProjectMeta {
 export type ChapterKind = 'capitulo' | 'prologo' | 'epilogo'
 
 export interface ChapterInfo {
-  /** nome do arquivo dentro de manuscrito/ (ex.: 001-o-ultimo-sino.md) */
+  /** nome do arquivo dentro de manuscrito/ (ex.: 001-o-ultimo-sino.md). Muda ao reordenar. */
   file: string
+  /** id estável (front-matter "id", ex.: ch-3f9a1c0b7d2e). Nunca muda: use para referências duradouras. */
+  id: string
   title: string
   kind: ChapterKind
   words: number
@@ -133,6 +154,8 @@ export interface Project {
 
 export interface ChapterContent {
   file: string
+  /** id estável (ver ChapterInfo.id); ausente só em capítulo ainda não migrado */
+  id?: string
   title: string
   kind: ChapterKind
   body: string
@@ -140,6 +163,8 @@ export interface ChapterContent {
   cena?: import('./models').CenaMeta
   /** chaves de conflitos de continuidade marcados como "foi de propósito" (front-matter "ignorados") */
   ignorados?: string[]
+  /** epígrafe de abertura do capítulo (front-matter "epigrafe"). DONO: Diagramação */
+  epigrafe?: EpigrafeCap
 }
 
 export interface SaveResult {
@@ -199,7 +224,14 @@ export const DEFAULT_LAYOUT: LayoutSettings = {
     dedicatoriaTexto: '',
     epigrafeTexto: '',
     epigrafeAutor: '',
-    colofaoTexto: ''
+    colofaoTexto: '',
+    posfacio: false,
+    posfacioTexto: '',
+    agradecimentos: false,
+    agradecimentosTexto: '',
+    sobreAutor: false,
+    sobreAutorTexto: '',
+    sobreAutorFoto: ''
   },
   cover: {
     sinopse: '',

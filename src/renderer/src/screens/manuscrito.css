@@ -422,3 +422,20 @@
 /* coluna de capítulos: menu da coluna */
 .ms-caps-hb { position: relative; display: flex; align-items: center; gap: 2px; }
 .ms-menu-col { right: 0; top: calc(100% + 4px); min-width: 210px; }
+/* quebra de página manual e figura com legenda */
+.ms-texto .quebra-pagina {
+  display: block; margin: 1.4em 0; padding: 0; text-align: center; text-indent: 0; user-select: none; cursor: pointer;
+  font-family: var(--fu); font-size: .62em; letter-spacing: .14em; text-transform: uppercase; color: var(--pacc);
+  border-top: 1px dashed currentColor; line-height: 2.2;
+}
+.ms-texto .quebra-pagina.ProseMirror-selectednode { outline: 1px dashed var(--pacc); outline-offset: 4px; border-radius: 4px; }
+.ms-texto .quebra-pagina + p, .ms-texto .ms-figura + p { text-indent: 0; }
+.ms-texto .ms-figura { margin: 1.4em 0; text-align: center; text-indent: 0; }
+.ms-texto .ms-figura img { max-width: 100%; max-height: 60vh; display: block; margin: 0 auto; border-radius: 2px; }
+.ms-texto .ms-figura.ProseMirror-selectednode img { outline: 2px solid var(--pacc); outline-offset: 3px; }
+.ms-texto .ms-figura-falta { display: block; font-family: var(--fu); font-size: .7em; color: var(--pacc); }
+.ms-texto .ms-figura-legenda {
+  display: block; width: 100%; margin-top: .5em; border: 0; border-bottom: 1px dashed transparent; background: transparent;
+  font-family: inherit; font-style: italic; font-size: .85em; line-height: 1.4; color: inherit; text-align: center; padding: 2px 0;
+}
+.ms-texto .ms-figura-legenda:hover, .ms-texto .ms-figura-legenda:focus { border-bottom-color: var(--line); outline: none; }

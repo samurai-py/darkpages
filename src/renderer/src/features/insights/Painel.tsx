@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import { call, folio } from '../../api'
+import { call } from '../../api'
 import type { Project } from '../../../../shared/types'
-import { INSIGHT_TIPOS, type Cartao, type EnredoBoard, type Insight, type InsightTipo, type ProativoEstado } from '../../../../shared/models'
+import { INSIGHT_TIPOS, type Cartao, type Insight, type InsightTipo, type ProativoEstado } from '../../../../shared/models'
 import type { NavParams, Screen } from '../../screen'
 import { ia } from '../ia/api'
 import { insightsStore, useInsights } from './store'
@@ -16,10 +16,6 @@ interface Props {
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
-}
-
-function novoId(prefixo: string): string {
-  return `${prefixo}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 /** Painel lateral "Insights" do livro aberto. */
@@ -97,28 +93,21 @@ export function PainelInsights({ project, go }: Props): ReactElement {
 
   const cartao = (i: Insight): Promise<void> =>
     executar(i, async () => {
-      const atual = await folio.docs.get<EnredoBoard>(project.dir, 'enredo', 'board')
-      const board: EnredoBoard = { cartoes: atual?.cartoes ?? [], ligacoes: atual?.ligacoes ?? [] }
-      const n = board.cartoes.length
       const palavras = i.texto.split(/\s+/)
-      const novo: Cartao = {
-        id: novoId('cartao'),
+      // gravado pelo main (enredo.adicionarCartao), que saneia o quadro
+      await call<Cartao>('enredo.adicionarCartao', project.dir, {
         tipo: i.tipo === 'pistas' ? 'ideia' : 'cena',
         titulo: i.acao?.tipo === 'cartao' ? i.acao.titulo : palavras.slice(0, 7).join(' ') + (palavras.length > 7 ? '…' : ''),
         texto: i.acao?.tipo === 'cartao' ? i.acao.texto : i.texto,
-        ...(i.capitulo ? { capitulo: i.capitulo, ordem: board.cartoes.filter((c) => c.capitulo === i.capitulo).length } : {}),
-        fichas: [],
-        x: 60 + (n % 5) * 260,
-        y: 60 + Math.floor(n / 5) * 200,
-        criadoEm: new Date().toISOString()
-      }
-      await folio.docs.put<EnredoBoard>(project.dir, 'enredo', 'board', { ...board, cartoes: [...board.cartoes, novo] })
+        ...(i.capitulo ? { capitulo: i.capitulo } : {}),
+        fichas: []
+      })
       await insightsStore.marcar(i.id, 'aplicado')
       return 'Virou cartão no Enredo.'
     })
 
+  // "aplicado" só quando o autor aceitar o rascunho no Manuscrito (ver Manuscrito.tsx → aceitar)
   const escrever = (i: Insight): void => {
-    void insightsStore.marcar(i.id, 'aplicado').catch(() => undefined)
     insightsStore.fechar()
     go('manuscrito', { chapter: i.capitulo, redigir: i.id, n: String(Date.now()) })
   }

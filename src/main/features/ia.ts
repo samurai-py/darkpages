@@ -1,6 +1,7 @@
 import { bookDir, str, type Ctx, type Handlers } from '../api/context'
-import { readChapter, saveChapter } from '../project'
-import { getDoc, putDoc } from '../store/docs'
+import { openProject, readChapter, saveChapter } from '../project'
+import { snapshotAgora } from '../arca'
+import { getDocCapitulo, putDocCapitulo } from '../store/capitulo-docs'
 import { readSectionMasked } from '../store/settings'
 import type { BetaLeitura, Conflito, Ideia, IdeiaTipo, IdeiasResult, SinonimosResult, Sugestao, SugestaoCategoria } from '../../shared/models'
 import {
@@ -20,13 +21,14 @@ import { salvarProativo } from '../insights/config'
 import { checarLanguageTool, ltBase, revisorSettings, salvarRevisorSettings } from '../ai/languagetool'
 import { contextoCapitulo, contextoEmTexto, fichas, fichasCitadas, fichaTexto, resumoCapitulo } from '../ai/contexto'
 import { conflitosComoSugestoes, continuidadeDeterministica } from '../ai/continuidade'
-import { aplicarTrocas, contexto, hashTexto, idCapitulo, pedacos, type Troca } from '../ai/texto'
+import { aplicarTrocas, contexto, hashTexto, pedacos, revalidarTrocas, type Troca } from '../ai/texto'
 
 /**
  * Métodos da feature IA (prefixo "ia."). Contratos em src/shared/models.ts.
- * Coleções usadas no livro: "resumos" (cache por hash), "beta" (última
- * leitura por capítulo), "revisoes" (última revisão por capítulo, para
- * aplicar sugestões por id).
+ * Coleções usadas no livro (um documento por capítulo, chave = id estável do
+ * capítulo, ver store/capitulo-docs.ts): "resumos" (cache por hash), "beta"
+ * (última leitura), "revisoes" (última revisão, para aplicar sugestões por id;
+ * guarda quais já foram aplicadas).
  */
 
 const CAP_RE = /^\d{3}-[a-z0-9-]+\.md$/
@@ -219,7 +221,7 @@ async function sinonimos(ctx: Ctx, palavra: string, frase: string): Promise<Sino
 async function continuidade(ctx: Ctx, dir: string, file: string): Promise<Conflito[]> {
   const cap = await readChapter(dir, file)
   const lista = await fichas(dir)
-  const det = continuidadeDeterministica(cap.body, file, lista).map(({ troca: _t, ...c }) => c)
+  const det = continuidadeDeterministica(cap.body, file, lista, (await openProject(dir)).chapters).map(({ troca: _t, ...c }) => c)
   const citadas = fichasCitadas(cap.body, lista).filter((f) => (f.campos ?? []).some((c) => c?.nome && c?.valor))
   if (!citadas.length || !cap.body.trim()) return det
   const s = await aiSettings(ctx)
@@ -307,7 +309,7 @@ async function beta(ctx: Ctx, dir: string, file: string): Promise<BetaLeitura> {
     geradoEm: new Date().toISOString()
   }
   if (!leitura.funciona && !leitura.melhorar) throw new Error('A IA não devolveu uma leitura aproveitável. Tente de novo.')
-  await putDoc(dir, 'beta', idCapitulo(file), leitura)
+  await putDocCapitulo(dir, 'beta', file, leitura)
   return leitura
 }
 
@@ -322,7 +324,17 @@ export interface RevisaoDetalhada {
 }
 
 interface RevisaoDoc extends RevisaoDetalhada {
+  /** hash do texto na última gravação desta revisão */
   hash: string
+  /** ids das sugestões já aplicadas (não voltam na lista) */
+  aplicadas?: string[]
+}
+
+/** Sugestões que ainda valem para o texto atual (tira as aplicadas e as que o texto não tem mais). */
+function sugestoesVigentes(doc: RevisaoDoc, corpo: string): Sugestao[] {
+  const feitas = new Set(doc.aplicadas ?? [])
+  const resto = doc.sugestoes.filter((s) => !feitas.has(s.id))
+  return revalidarTrocas(corpo, resto)
 }
 
 async function estiloPorIa(ctx: Ctx, corpo: string): Promise<Sugestao[]> {
@@ -387,7 +399,7 @@ async function revisarDetalhado(ctx: Ctx, dir: string, file: string): Promise<Re
     }
   }
 
-  sugestoes.push(...conflitosComoSugestoes(continuidadeDeterministica(cap.body, file, await fichas(dir))))
+  sugestoes.push(...conflitosComoSugestoes(continuidadeDeterministica(cap.body, file, await fichas(dir), (await openProject(dir)).chapters)))
 
   if (ia.provider === 'off') avisos.push('IA desligada: estilo e repetição não foram analisados.')
   else {
@@ -408,7 +420,7 @@ async function revisarDetalhado(ctx: Ctx, dir: string, file: string): Promise<Re
   })
   unicas.sort((a, b) => posicao(cap.body, a) - posicao(cap.body, b))
   const r: RevisaoDetalhada = { sugestoes: unicas, avisos, geradoEm: new Date().toISOString() }
-  await putDoc<RevisaoDoc>(dir, 'revisoes', idCapitulo(file), { ...r, hash: hashTexto(cap.body) })
+  await putDocCapitulo<RevisaoDoc>(dir, 'revisoes', file, { ...r, hash: hashTexto(cap.body), aplicadas: [] }, cap.id)
   if (!unicas.length && avisos.length && avisos.every((a) => /: /.test(a) && !/desligad/.test(a))) {
     throw new Error(avisos.join('\n'))
   }
@@ -419,11 +431,16 @@ async function aplicar(dir: string, file: string, alvo: unknown): Promise<{ apli
   if (!Array.isArray(alvo) || !alvo.length) throw new Error('Nada para aplicar.')
   if (alvo.length > 2000) throw new Error('Sugestões demais de uma vez.')
   let trocas: Troca[]
+  const cap = await readChapter(dir, file)
+  let doc: (RevisaoDoc & { id: string }) | null = null
+  let porId: Sugestao[] = []
   if (alvo.every((x) => typeof x === 'string')) {
-    const doc = await getDoc<RevisaoDoc>(dir, 'revisoes', idCapitulo(file))
+    doc = await getDocCapitulo<RevisaoDoc>(dir, 'revisoes', file, cap.id)
     if (!doc) throw new Error('Revise o capítulo antes de aplicar sugestões.')
     const ids = new Set(alvo as string[])
-    trocas = doc.sugestoes.filter((s) => ids.has(s.id))
+    // o texto pode ter mudado desde a revisão (outra sugestão aplicada): contexto recalculado
+    porId = sugestoesVigentes(doc, cap.body).filter((s) => ids.has(s.id))
+    trocas = porId
     if (!trocas.length) throw new Error('Essas sugestões não existem mais. Revise o capítulo de novo.')
   } else {
     trocas = (alvo as unknown[]).map((x) => {
@@ -438,10 +455,17 @@ async function aplicar(dir: string, file: string, alvo: unknown): Promise<{ apli
       }
     })
   }
-  const cap = await readChapter(dir, file)
   const r = aplicarTrocas(cap.body, trocas)
   if (!r.aplicadas) return { aplicadas: 0, falhas: r.falhas, words: 0, savedAt: '' }
+  // gravação que não vem do editor: guarda o estado anterior na Arca
+  await snapshotAgora(dir, 'antes de aplicar revisão')
   const saved = await saveChapter(dir, file, cap.title, r.texto)
+  if (doc) {
+    // a revisão continua valendo para as outras sugestões: guarda quais já foram e o hash novo
+    const feitas = r.aplicadasIdx.map((i) => porId[i]?.id).filter((x): x is string => !!x)
+    const { id: _id, ...resto } = doc
+    await putDocCapitulo<RevisaoDoc>(dir, 'revisoes', file, { ...resto, aplicadas: [...new Set([...(doc.aplicadas ?? []), ...feitas])], hash: hashTexto(r.texto) }, cap.id)
+  }
   return { aplicadas: r.aplicadas, falhas: r.falhas, words: saved.words, savedAt: saved.savedAt }
 }
 
@@ -512,7 +536,7 @@ export const handlers: Handlers = {
 
   /** Última leitura beta salva do capítulo (ou null), sem chamar a IA. */
   'ia.betaGet': async (ctx, dir, file) => {
-    const d = await getDoc<BetaLeitura>(await bookDir(ctx, dir), 'beta', idCapitulo(capFile(file)))
+    const d = await getDocCapitulo<BetaLeitura>(await bookDir(ctx, dir), 'beta', capFile(file))
     if (!d) return null
     const { id: _id, ...leitura } = d
     return leitura
@@ -525,15 +549,21 @@ export const handlers: Handlers = {
   /** Igual a ia.revisar, mas devolve também avisos (motor desligado/fora do ar). Usado pela tela Revisor. */
   'ia.revisarDetalhado': async (ctx, dir, file) => revisarDetalhado(ctx, await bookDir(ctx, dir), capFile(file)),
 
-  /** Última revisão salva do capítulo, se o texto não mudou desde então. */
+  /**
+   * Última revisão salva do capítulo, só com as sugestões que ainda valem:
+   * as já aplicadas saem, e cada uma das outras é conferida contra o texto
+   * atual (o trecho original ainda existe?). null se nada sobrou de um texto
+   * que mudou.
+   */
   'ia.revisaoGet': async (ctx, dir, file) => {
     const d = await bookDir(ctx, dir)
     const f = capFile(file)
-    const doc = await getDoc<RevisaoDoc>(d, 'revisoes', idCapitulo(f))
-    if (!doc) return null
     const cap = await readChapter(d, f)
-    if (doc.hash !== hashTexto(cap.body)) return null
-    return { sugestoes: doc.sugestoes, avisos: doc.avisos, geradoEm: doc.geradoEm }
+    const doc = await getDocCapitulo<RevisaoDoc>(d, 'revisoes', f, cap.id)
+    if (!doc) return null
+    const sugestoes = sugestoesVigentes(doc, cap.body)
+    if (!sugestoes.length && doc.hash !== hashTexto(cap.body)) return null
+    return { sugestoes, avisos: doc.avisos, geradoEm: doc.geradoEm }
   },
 
   'ia.aplicar': async (ctx, dir, file, alvo) => aplicar(await bookDir(ctx, dir), capFile(file), alvo)

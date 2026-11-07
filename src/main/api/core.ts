@@ -35,7 +35,11 @@ export const core: Handlers = {
     saveChapter(await bookDir(ctx, dir), str(file, 200), str(title, 300), str(body)),
   addChapter: async (ctx, dir, title) => addChapter(await bookDir(ctx, dir), str(title, 300)),
   saveLayout: async (ctx, dir, layout) => saveLayout(await bookDir(ctx, dir), layout as LayoutSettings),
-  exportPrintPdf: async (ctx, dir) => exportPrintPdf(await bookDir(ctx, dir), ctx.resourcesDir),
+  exportPrintPdf: async (ctx, dir, perfil) => {
+    const p = perfil === undefined ? 'grafica' : str(perfil, 10)
+    if (p !== 'grafica' && p !== 'kdp' && p !== 'tela') throw new Error('Perfil de PDF inválido: use grafica, kdp ou tela')
+    return exportPrintPdf(await bookDir(ctx, dir), ctx.resourcesDir, p)
+  },
   revealFile: async (ctx, path) => ctx.reveal(str(path, 4096)),
   openExternal: async (ctx, url) => {
     const u = str(url, 4096)

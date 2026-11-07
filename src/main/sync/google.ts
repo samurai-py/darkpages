@@ -24,6 +24,8 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const DEVICE_URL = 'https://oauth2.googleapis.com/device/code'
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 export const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file openid email'
+export const ESCOPO_FALTANDO =
+  'O Google não deu acesso ao Drive. Clique em Desconectar, depois em Conectar, e na tela do Google deixe marcada a opção de ver e editar os arquivos criados pelo Folio.'
 
 export interface DriveSettings {
   clientId?: string
@@ -232,6 +234,9 @@ export class GoogleAuth {
   }
 
   private async saveTokens(tok: Record<string, unknown>, client: 'desktop' | 'device'): Promise<void> {
+    // o Google deixa desmarcar permissões na tela de consentimento: sem drive.file nada sincroniza
+    const concedidos = typeof tok['scope'] === 'string' ? tok['scope'] : ''
+    if (concedidos && !concedidos.includes('auth/drive.file')) throw new AuthError(ESCOPO_FALTANDO)
     const refresh = typeof tok['refresh_token'] === 'string' ? tok['refresh_token'] : ''
     if (!refresh) throw new Error('O Google não devolveu um refresh token. Remova o acesso do Folio na sua conta Google e conecte de novo.')
     const at = typeof tok['access_token'] === 'string' ? tok['access_token'] : ''

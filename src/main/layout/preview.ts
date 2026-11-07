@@ -75,7 +75,7 @@ export async function previewPages(dir: string, resourcesDir: string, inicio: nu
       }))
     )
     paginas.sort((a, c) => a.numero - c.numero)
-    await rememberPageCount(dir, map.total)
+    await rememberPageCount(dir, map.total, b.fingerprint)
     const l = resolveLayout(b.project.meta.layout)
     const S = l.bleedMm + (l.cropMarks ? SLUG_MM : 0)
     const titles = new Map(b.chapters.map((c) => [c.file, c.title]))

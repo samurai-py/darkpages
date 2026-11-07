@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { errMsg, relTime, syncApi, useVisiblePolling, type SyncStatus as Status } from './api'
+import { versoesApi, type DiffConflito } from '../versoes/api'
+import { DiffView, Placar } from '../versoes/DiffView'
 import './sync.css'
 
 type Estado = 'desconectado' | 'conflito' | 'offline' | 'erro' | 'enviando' | 'emdia' | 'carregando'
@@ -54,6 +56,25 @@ export function SyncStatus({ dir }: { dir: string }): ReactElement | null {
   const box = useRef<HTMLDivElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
   const panelId = useId()
+  // diff do conflito aberto: deste computador (riscado) para a cópia do Drive (sublinhado)
+  const [comparando, setComparando] = useState<string | null>(null)
+  const [dc, setDc] = useState<DiffConflito | null>(null)
+  const [dcErro, setDcErro] = useState<string | null>(null)
+
+  const comparar = async (arquivo: string, copia: string): Promise<void> => {
+    if (comparando === arquivo) {
+      setComparando(null)
+      return
+    }
+    setComparando(arquivo)
+    setDc(null)
+    setDcErro(null)
+    try {
+      setDc(await versoesApi.conflito(dir, arquivo, copia))
+    } catch (e) {
+      setDcErro(errMsg(e))
+    }
+  }
 
   const load = async (): Promise<void> => {
     try {
@@ -118,7 +139,7 @@ export function SyncStatus({ dir }: { dir: string }): ReactElement | null {
         {estado === 'conflito' ? 'Há um conflito de sincronização' : ''}
       </span>
       {open && (
-        <div id={panelId} className="sy-pop panel" role="dialog" aria-label="Sincronização com o Google Drive">
+        <div id={panelId} className={`sy-pop panel${comparando ? ' vs-larga' : ''}`} role="dialog" aria-label="Sincronização com o Google Drive">
           <div className="sy-head">
             <span className={`sy-ico sy-${estado}`}>
               <CloudIcon estado={estado} size={22} />
@@ -164,6 +185,27 @@ export function SyncStatus({ dir }: { dir: string }): ReactElement | null {
                   <li key={c.arquivo}>
                     <code title={c.arquivo}>{c.arquivo}</code>
                     <span className="muted">cópia: {c.copia.split('/').pop()}</span>
+                    <button type="button" className="btn sm ms-quieto" aria-expanded={comparando === c.arquivo} onClick={() => void comparar(c.arquivo, c.copia)}>
+                      {comparando === c.arquivo ? 'Esconder diferenças' : 'Ver diferenças'}
+                    </button>
+                    {comparando === c.arquivo && (
+                      <>
+                        {dcErro && <p className="err sy-p">{dcErro}</p>}
+                        {!dc && !dcErro && <p className="sy-p">Comparando…</p>}
+                        {dc && !dc.texto && <p className="sy-p">Este arquivo não é texto (ou é grande demais) para mostrar as diferenças.</p>}
+                        {dc?.texto && (
+                          <>
+                            <span className="vs-conf-l">
+                              <span>Riscado: só neste computador · Sublinhado: só no Drive</span>
+                              <Placar adicionadas={dc.adicionadas} removidas={dc.removidas} />
+                            </span>
+                            <div className="vs-conf">
+                              <DiffView ops={dc.ops} vazio="O texto é igual nas duas versões; só os metadados mudaram." />
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
                     <span className="sy-row">
                       <button type="button" className="btn sm" disabled={busy} onClick={() => void act(() => syncApi.resolver(dir, c.arquivo, 'local'))}>
                         Manter a deste computador

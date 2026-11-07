@@ -14,7 +14,9 @@
     "web": "electron-vite build && tsx src/server/index.ts",
     "web:tailscale": "electron-vite build && FOLIO_HOST=$(tailscale ip -4 | head -1) tsx src/server/index.ts",
     "fetch:fonts": "node scripts/fetch-fonts.mjs",
-    "setup": "npm run fetch:typst && npm run fetch:fonts"
+    "setup": "npm run fetch:typst && npm run fetch:fonts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.1.0",
@@ -46,6 +48,7 @@
     "react-dom": "^18.3.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^3.2.4"
   }
 }

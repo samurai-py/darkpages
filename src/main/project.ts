@@ -1,7 +1,10 @@
 import { mkdir, readdir, readFile, rename, writeFile, cp, stat } from 'node:fs/promises'
+import { createHash, randomBytes } from 'node:crypto'
 import type { CenaMeta } from '../shared/models'
 import { join, basename, resolve, sep } from 'node:path'
 import YAML from 'yaml'
+import { snapshotAgora } from './arca'
+import type { MotivoSnapshot } from '../shared/versoes'
 import {
   DEFAULT_LAYOUT,
   countWords,
@@ -76,10 +79,88 @@ async function atomicWrite(path: string, data: string): Promise<void> {
   await rename(tmp, path)
 }
 
+// ---------------------------------------------------------------------------
+// Id estável do capítulo
+// ---------------------------------------------------------------------------
+
+/**
+ * Id do capítulo no front-matter ("ch-" + letras/dígitos). Nasce com o
+ * capítulo e nunca muda: reordenar renomeia o arquivo (NNN-slug.md), renomear
+ * muda só o título, mudar o tipo muda a numeração exibida — o id fica.
+ * Caches por capítulo (resumos, leitura beta, revisão, estado dos insights)
+ * usam o id como chave do documento.
+ */
+export const CHAPTER_ID = /^ch-[a-z0-9]{6,32}$/
+
+/** Id novo e aleatório (capítulos criados pelo app). */
+export function novoIdCapitulo(): string {
+  return `ch-${randomBytes(8).toString('hex').slice(0, 12)}`
+}
+
+/**
+ * Id de migração de um capítulo antigo, sem id: derivado do nome do arquivo e
+ * do título no momento da migração. Determinístico de propósito: dois
+ * computadores que migram o mesmo livro sincronizado escrevem o mesmo id
+ * (mesmo conteúdo), sem criar conflito no Drive.
+ */
+export function idDeMigracao(file: string, titulo: string): string {
+  return `ch-${createHash('sha256').update(`${file}\0${titulo}`).digest('hex').slice(0, 12)}`
+}
+
+/**
+ * Decide quais capítulos precisam de id (puro, testável). Recebe os capítulos
+ * na ordem do livro e devolve arquivo → { atual, novo } só dos que mudam:
+ * sem id (ou id inválido) ganham o id de migração; id repetido (arquivo
+ * duplicado à mão) fica com o primeiro, os seguintes ganham id aleatório.
+ */
+export function planejarIds(caps: Array<{ file: string; id?: unknown; titulo?: string }>): Map<string, { atual: unknown; novo: string }> {
+  const vistos = new Set<string>()
+  const out = new Map<string, { atual: unknown; novo: string }>()
+  for (const c of caps) {
+    const valido = typeof c.id === 'string' && CHAPTER_ID.test(c.id)
+    if (valido && !vistos.has(c.id as string)) {
+      vistos.add(c.id as string)
+      continue
+    }
+    let novo = valido ? novoIdCapitulo() : idDeMigracao(c.file, c.titulo ?? '')
+    while (vistos.has(novo)) novo = novoIdCapitulo()
+    vistos.add(novo)
+    out.set(c.file, { atual: c.id, novo })
+  }
+  return out
+}
+
+/**
+ * Grava o id no front-matter sem tocar no texto (escrita atômica, na fila do
+ * arquivo). Só grava se o id ainda for o que foi lido (`esperado`), para duas
+ * aberturas simultâneas não se atropelarem. Devolve o id que ficou no arquivo.
+ */
+async function gravarId(dir: string, file: string, esperado: unknown, novo: string): Promise<string> {
+  const path = chapterPath(dir, file)
+  return withLock(path, async () => {
+    const { fm, body } = parseChapter(await readFile(path, 'utf8'))
+    if (fm.id !== esperado) return typeof fm.id === 'string' ? fm.id : novo
+    await atomicWrite(path, serializeChapter({ ...fm, id: novo }, body))
+    return novo
+  })
+}
+
+/** Id estável de um capítulo (migra o livro se o capítulo ainda não tem). */
+export async function idDoCapitulo(dir: string, file: string): Promise<string> {
+  const c = await readChapter(dir, file)
+  if (c.id) return c.id
+  const p = await openProject(dir)
+  const id = p.chapters.find((x) => x.file === file)?.id
+  if (!id) throw new Error(`Capítulo não encontrado: ${file}`)
+  return id
+}
+
 /** Front-matter do capítulo. Campos desconhecidos são preservados ao regravar. */
 interface FrontMatter {
   titulo?: string
   tipo?: ChapterKind
+  /** id estável (ver CHAPTER_ID); nunca muda */
+  id?: string
   cena?: CenaMeta
   ignorados?: string[]
   [k: string]: unknown
@@ -111,8 +192,8 @@ function clean(fm: FrontMatter): FrontMatter {
 }
 
 function serializeChapter(fm: FrontMatter, body: string): string {
-  const { titulo, tipo, ...rest } = fm
-  const ordered = clean({ titulo, tipo: kindOf(tipo), ...rest })
+  const { titulo, tipo, id, ...rest } = fm
+  const ordered = clean({ titulo, tipo: kindOf(tipo), id, ...rest })
   return `---\n${YAML.stringify(ordered).trimEnd()}\n---\n\n${body.replace(/^\n+/, '')}`
 }
 
@@ -140,11 +221,17 @@ export async function openProject(dir: string): Promise<Project> {
   await recoverReorder(dir)
   const meta = metaFromYaml(await readFile(join(dir, META_FILE), 'utf8'))
   const files = (await readdir(join(dir, MS_DIR))).filter((f) => CHAPTER_FILE.test(f)).sort()
+  const lidos: Array<{ file: string; fm: FrontMatter; body: string }> = []
+  for (const file of files) lidos.push({ file, ...parseChapter(await readFile(join(dir, MS_DIR, file), 'utf8')) })
+  // migração preguiçosa: capítulo sem id (ou com id repetido) ganha um agora
+  const plano = planejarIds(lidos.map((l) => ({ file: l.file, id: l.fm.id, titulo: l.fm.titulo })))
   const chapters: ChapterInfo[] = []
-  for (const file of files) {
-    const { fm, body } = parseChapter(await readFile(join(dir, MS_DIR, file), 'utf8'))
+  for (const { file, fm, body } of lidos) {
+    const p = plano.get(file)
+    const id = p ? await gravarId(dir, file, p.atual, p.novo) : (fm.id as string)
     chapters.push({
       file,
+      id,
       title: fm.titulo ?? basename(file, '.md'),
       kind: kindOf(fm.tipo),
       words: countWords(body)
@@ -166,7 +253,7 @@ export async function createProject(parent: string, title: string, author: strin
   await atomicWrite(join(dir, META_FILE), YAML.stringify(meta))
   await atomicWrite(
     join(dir, MS_DIR, '001-capitulo-um.md'),
-    serializeChapter({ titulo: 'Capítulo um', tipo: 'capitulo' }, 'Comece a escrever aqui.\n')
+    serializeChapter({ titulo: 'Capítulo um', tipo: 'capitulo', id: novoIdCapitulo() }, 'Comece a escrever aqui.\n')
   )
   return openProject(dir)
 }
@@ -175,20 +262,30 @@ export async function readChapter(dir: string, file: string): Promise<ChapterCon
   const { fm, body } = parseChapter(await readFile(chapterPath(dir, file), 'utf8'))
   return {
     file,
+    ...(typeof fm.id === 'string' && CHAPTER_ID.test(fm.id) ? { id: fm.id } : {}),
     title: fm.titulo ?? basename(file, '.md'),
     kind: kindOf(fm.tipo),
     body,
     cena: fm.cena && typeof fm.cena === 'object' ? fm.cena : {},
-    ignorados: Array.isArray(fm.ignorados) ? fm.ignorados.map(String) : []
+    ignorados: Array.isArray(fm.ignorados) ? fm.ignorados.map(String) : [],
+    ...epigrafeDe(fm.epigrafe)
   }
+}
+
+/** Epígrafe do capítulo no front-matter ("epigrafe: {texto, autor}"). DONO: Diagramação */
+function epigrafeDe(v: unknown): { epigrafe?: import('../shared/types').EpigrafeCap } {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const o = v as Record<string, unknown>
+  const texto = typeof o.texto === 'string' ? o.texto : ''
+  if (!texto.trim()) return {}
+  return { epigrafe: { texto, ...(typeof o.autor === 'string' && o.autor.trim() ? { autor: o.autor } : {}) } }
 }
 
 async function snapshotIfDue(dir: string): Promise<boolean> {
   const now = Date.now()
   if (now - (lastSnapshot.get(dir) ?? 0) < SNAPSHOT_EVERY_MS) return false
   lastSnapshot.set(dir, now)
-  const stamp = new Date(now).toISOString().replace(/[:.]/g, '-')
-  await cp(join(dir, MS_DIR), join(dir, ARCA_DIR, stamp, MS_DIR), { recursive: true })
+  await snapshotAgora(dir, 'automático')
   return true
 }
 
@@ -207,7 +304,7 @@ export async function addChapter(dir: string, title: string): Promise<Project> {
   const last = files.at(-1)
   const next = last ? Number(last.slice(0, 3)) + 1 : 1
   const file = `${String(next).padStart(3, '0')}-${slugify(title)}.md`
-  await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: title, tipo: 'capitulo' }, ''))
+  await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: title, tipo: 'capitulo', id: novoIdCapitulo() }, ''))
   return openProject(dir)
 }
 
@@ -229,7 +326,7 @@ async function chapterFiles(dir: string): Promise<string[]> {
 export async function updateChapterMeta(
   dir: string,
   file: string,
-  patch: { titulo?: string; tipo?: ChapterKind; cena?: CenaMeta | null; ignorados?: string[] | null }
+  patch: { titulo?: string; tipo?: ChapterKind; cena?: CenaMeta | null; ignorados?: string[] | null; epigrafe?: import('../shared/types').EpigrafeCap | null }
 ): Promise<ChapterContent> {
   const path = chapterPath(dir, file)
   await withLock(path, async () => {
@@ -315,16 +412,15 @@ export async function appendChapters(
   const created: string[] = []
   for (const it of items) {
     const file = `${String(next).padStart(3, '0')}-${slugify(it.title)}.md`
-    await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: it.title, tipo: it.kind }, it.body))
+    await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: it.title, tipo: it.kind, id: novoIdCapitulo() }, it.body))
     created.push(file)
     next++
   }
   return created
 }
 
-/** Snapshot imediato do manuscrito (antes de operações estruturais). */
-export async function snapshotNow(dir: string): Promise<void> {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  await cp(join(dir, MS_DIR), join(dir, ARCA_DIR, stamp, MS_DIR), { recursive: true })
+/** Snapshot imediato do manuscrito (antes de operações estruturais). Ver arca.ts. */
+export async function snapshotNow(dir: string, motivo: MotivoSnapshot = 'antes de reordenar'): Promise<void> {
+  await snapshotAgora(dir, motivo)
   lastSnapshot.set(dir, Date.now())
 }

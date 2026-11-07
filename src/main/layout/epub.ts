@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import JSZip from 'jszip'
 import { openProject, readChapter, slugify } from '../project'
-import type { ChapterContent } from '../../shared/types'
-import { aberturaPath, capaFrentePath } from './assets'
+import type { ChapterContent, EpigrafeCap } from '../../shared/types'
+import { aberturaPath, capaFrentePath, imageKind, mediaType, type ImageKind } from './assets'
 import { isbnToEan } from './cover'
 import { chapterLabelText, numberChapters, showsTitle } from './labels'
 import { rotuloTela } from '../../shared/rotulo'
-import { parseBody, type Inline } from './markdown'
+import { assetName, parseBody, parseInline, type Block, type Inline } from './markdown'
 import { chapterDropCap, resolveLayout, type FullLayout } from './settings'
 
 /**
@@ -24,7 +24,59 @@ export interface EpubResult {
   notas: number
   capa: boolean
   aberturas: number
+  /** imagens com legenda no texto */
+  figuras: number
+  /** fonte do miolo embutida (null = o leitor usa a fonte dele) */
+  fonte: string | null
   bytes: number
+}
+
+const EXT: Record<ImageKind, string> = { png: 'png', jpeg: 'jpg', webp: 'webp', svg: 'svg' }
+
+function acessibilidade(notas: number, imagens: number): string {
+  return [
+    'Texto reflowable com títulos, sumário navegável e ordem de leitura que segue o livro impresso.',
+    notas ? 'As notas de rodapé ficam no fim de cada capítulo, com link de ida e volta.' : '',
+    imagens ? 'Imagens têm texto alternativo (legenda ou descrição).' : '',
+    'Sem riscos conhecidos (sem animação, som ou flashes).'
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+interface FonteEmbutida {
+  files: Array<{ name: string; data: Buffer; italic: boolean; weight: string }>
+}
+
+/**
+ * Arquivos da fonte do miolo em resources/fonts/<família sem espaços>/, se a
+ * pasta tiver a licença OFL (que permite embutir). Só regular, itálico,
+ * negrito e negrito itálico (ou os arquivos variáveis [wght]), para o EPUB não
+ * inchar. Fonte do sistema não é embutida: a licença é desconhecida.
+ */
+async function bundledFont(resourcesDir: string, family: string): Promise<FonteEmbutida | null> {
+  const folder = join(resourcesDir, 'fonts', family.toLowerCase().replace(/[^a-z0-9]/g, ''))
+  let names: string[]
+  try {
+    names = await readdir(folder)
+  } catch {
+    return null
+  }
+  if (!names.some((n) => /^OFL/i.test(n))) return null
+  const files: FonteEmbutida['files'] = []
+  for (const n of names.filter((x) => /\.(ttf|otf)$/i.test(x)).sort()) {
+    const italic = /italic/i.test(n)
+    const variable = /\[wght\]/i.test(n)
+    const style = n.replace(/\.(ttf|otf)$/i, '').split('-').slice(1).join('-').replace(/italic/i, '')
+    let weight: string | null = null
+    if (variable) weight = '400 800'
+    else if (style === '' || /^regular$/i.test(style)) weight = '400'
+    else if (/^bold$/i.test(style)) weight = '700'
+    if (!weight) continue
+    if (/\.otf$/i.test(n)) continue // manifesto declara font/ttf; .otf ficaria com tipo errado
+    files.push({ name: n.replace(/[[\]]/g, ''), data: await readFile(join(folder, n)), italic, weight })
+  }
+  return files.length ? { files } : null
 }
 
 function esc(s: string): string {
@@ -35,6 +87,91 @@ interface NoteSink {
   notes: string[]
   /** prefixo único por capítulo, para ids */
   prefix: string
+}
+
+/** Imagens do texto (nome em assets/ → caminho no EPUB), preenchido pelo exportador. */
+interface ImgSink {
+  map: Map<string, string>
+}
+
+/** Blocos do leitor único → XHTML. `firstDrop` aplica a capitular no primeiro parágrafo. */
+function blocksXhtml(blocks: Block[], sink: NoteSink, imgs: ImgSink, scene: string, firstDrop: boolean): string {
+  let first = true
+  let afterBreak = true
+  const parts: string[] = []
+  for (const b of blocks) {
+    switch (b.t) {
+      case 'scene':
+        parts.push(`<p class="cena" role="separator" aria-label="Quebra de cena">${esc(scene) || '&#160;'}</p>`)
+        afterBreak = true
+        continue
+      case 'pagebreak':
+        parts.push('<div class="quebra-pagina" aria-hidden="true"></div>')
+        afterBreak = true
+        continue
+      case 'quote':
+        parts.push(`<blockquote>${b.c.map((p) => `<p>${inlineXhtml(p, sink)}</p>`).join('')}</blockquote>`)
+        afterBreak = false
+        continue
+      case 'sub':
+        parts.push(`<h2>${inlineXhtml(b.c, sink)}</h2>`)
+        afterBreak = true
+        continue
+      case 'figure': {
+        const href = b.src ? imgs.map.get(b.src) : undefined
+        const cap = inlineXhtml(b.caption, sink)
+        const alt = esc(plainCaption(b.caption) || 'Ilustração')
+        parts.push(
+          href
+            ? `<figure class="figura"><img src="${href}" alt="${alt}"/>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`
+            : cap
+              ? `<p class="legenda-solta">${cap}</p>`
+              : ''
+        )
+        afterBreak = true
+        continue
+      }
+      case 'p': {
+        let html = inlineXhtml(b.c, sink)
+        if (first && firstDrop) {
+          // primeira letra (com aspas de abertura) em capitular, se o parágrafo começar com letra
+          const m = html.match(/^((?:&quot;|&#39;|[“«‘(])*)(\p{L}|\p{N})/u)
+          if (m) html = `<span class="capitular">${m[0]}</span>${html.slice(m[0].length)}`
+        }
+        parts.push(`<p${afterBreak ? ' class="sem-recuo"' : ''}>${html}</p>`)
+        first = false
+        afterBreak = false
+      }
+    }
+  }
+  return parts.join('\n')
+}
+
+function plainCaption(c: Inline[]): string {
+  return c.map((n) => (n.t === 'text' ? n.v : n.t === 'br' ? ' ' : n.t === 'note' ? '' : plainCaption(n.c))).join('').trim()
+}
+
+function notesSection(sink: NoteSink): string {
+  const prefix = sink.prefix
+  return sink.notes.length
+    ? `<section class="notas" epub:type="endnotes" role="doc-endnotes">
+<h2>Notas</h2>
+<ol>
+${sink.notes.map((t, i) => `<li id="${prefix}n${i + 1}" epub:type="endnote"><p>${t} <a href="#${prefix}r${i + 1}" role="doc-backlink" title="Voltar ao texto">↩</a></p></li>`).join('\n')}
+</ol>
+</section>`
+    : ''
+}
+
+function epigrafeXhtml(e: EpigrafeCap | undefined, sink: NoteSink): string {
+  if (!e || !e.texto.trim()) return ''
+  const linhas = e.texto
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => inlineXhtml(parseInline(l, []), sink))
+  return `<blockquote class="epigrafe-cap" epub:type="epigraph" role="doc-epigraph"><p>${linhas.join('<br/>')}</p>${e.autor?.trim() ? `<p class="quem">— ${esc(e.autor.trim())}</p>` : ''}</blockquote>`
 }
 
 function inlineXhtml(c: Inline[], sink: NoteSink): string {
@@ -50,10 +187,11 @@ function inlineXhtml(c: Inline[], sink: NoteSink): string {
         case 'strong':
           return `<strong>${inlineXhtml(n.c, sink)}</strong>`
         case 'note': {
+          // reserva o número antes de montar o corpo: uma nota dentro da nota
+          // ganha o número seguinte e ids próprios (nunca repetidos)
           const k = sink.notes.length + 1
-          // a nota é montada antes de entrar na lista: notas aninhadas viram texto
-          const body = inlineXhtml(n.c, { notes: [], prefix: sink.prefix })
-          sink.notes.push(body)
+          sink.notes.push('')
+          sink.notes[k - 1] = inlineXhtml(n.c, sink)
           return `<sup><a class="noteref" id="${sink.prefix}r${k}" href="#${sink.prefix}n${k}" epub:type="noteref" role="doc-noteref">${k}</a></sup>`
         }
       }
@@ -94,7 +232,7 @@ const SCENE_TEXT: Record<string, string> = {
   espaco: ''
 }
 
-function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, art: string | null): { xhtml: string; notes: number; heading: string } {
+function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, art: string | null, imgs: ImgSink): { xhtml: string; notes: number; heading: string } {
   const label = chapterLabelText(c.kind, n, l.rotulo)
   const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
   const tela = rotuloTela(c.kind, n, l.rotulo)
@@ -104,43 +242,9 @@ function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, 
   const { blocks } = parseBody(c.body)
   const drop = chapterDropCap(l, c.file) !== 'nenhuma'
   const scene = SCENE_TEXT[l.sceneOrnament] ?? '⁂'
-  let first = true
-  let afterBreak = true
-  const parts: string[] = []
-  for (const b of blocks) {
-    if (b.t === 'scene') {
-      parts.push(`<p class="cena" role="separator" aria-label="Quebra de cena">${esc(scene) || '&#160;'}</p>`)
-      afterBreak = true
-      continue
-    }
-    if (b.t === 'quote') {
-      parts.push(`<blockquote><p>${inlineXhtml(b.c, sink)}</p></blockquote>`)
-      afterBreak = false
-      continue
-    }
-    if (b.t === 'sub') {
-      parts.push(`<h2>${inlineXhtml(b.c, sink)}</h2>`)
-      afterBreak = true
-      continue
-    }
-    let html = inlineXhtml(b.c, sink)
-    if (first && drop) {
-      // primeira letra (com aspas de abertura) em capitular, se o parágrafo começar com letra
-      const m = html.match(/^((?:&quot;|&#39;|[“«‘(])*)(\p{L}|\p{N})/u)
-      if (m) html = `<span class="capitular">${m[0]}</span>${html.slice(m[0].length)}`
-    }
-    parts.push(`<p${afterBreak ? ' class="sem-recuo"' : ''}>${html}</p>`)
-    first = false
-    afterBreak = false
-  }
-  const notes = sink.notes.length
-    ? `<section class="notas" epub:type="endnotes" role="doc-endnotes">
-<h2>Notas</h2>
-<ol>
-${sink.notes.map((t, i) => `<li id="${prefix}n${i + 1}" epub:type="endnote"><p>${t} <a href="#${prefix}r${i + 1}" role="doc-backlink" title="Voltar ao texto">↩</a></p></li>`).join('\n')}
-</ol>
-</section>`
-    : ''
+  const epi = epigrafeXhtml(c.epigrafe, sink)
+  const texto = blocksXhtml(blocks, sink, imgs, scene, drop)
+  const notes = notesSection(sink)
   const type = c.kind === 'prologo' ? 'prologue' : c.kind === 'epilogo' ? 'epilogue' : 'chapter'
   const role = c.kind === 'prologo' ? 'doc-prologue' : c.kind === 'epilogo' ? 'doc-epilogue' : 'doc-chapter'
   const body = `<section epub:type="${type}" role="${role}" aria-labelledby="titulo">
@@ -149,7 +253,8 @@ ${art ? `<figure class="abertura"><img src="${art}" alt="Ilustração de abertur
 ${label && showsTitle(c, label) ? `<p class="rotulo${l.rotulo.caixa === 'versalete' ? ' versalete' : ''}">${esc(label)}</p>` : ''}
 <h1 id="titulo">${esc(title)}</h1>
 </header>
-${parts.join('\n')}
+${epi}
+${texto}
 ${notes}
 </section>`
   return { xhtml: page(title, body, 'bodymatter'), notes: sink.notes.length, heading: navTitle }
@@ -157,7 +262,7 @@ ${notes}
 
 const CSS = `@charset "UTF-8";
 html { -epub-hyphens: auto; hyphens: auto; }
-body { margin: 0 5%; font-family: serif; line-height: 1.45; widows: 2; orphans: 2; }
+body { margin: 0 5%; font-family: FONTE serif; line-height: 1.45; widows: 2; orphans: 2; }
 p { margin: 0; text-indent: 1.4em; text-align: justify; }
 p.sem-recuo, .abertura-cap + p { text-indent: 0; }
 h1 { font-weight: normal; font-size: 1.8em; text-align: center; margin: 0.2em 0 1.6em; line-height: 1.2; }
@@ -191,6 +296,16 @@ figure.abertura img { max-width: 100%; max-height: 95vh; }
 .epigrafe .quem { font-style: normal; font-size: 0.9em; margin-top: 0.6em; }
 .colofao { margin-top: 40%; text-align: center; font-style: italic; font-size: 0.9em; }
 .colofao p { text-indent: 0; text-align: center; }
+blockquote p + p { margin-top: 0.6em; }
+.quebra-pagina { page-break-after: always; break-after: page; height: 0; margin: 0; }
+figure.figura { margin: 1.4em 0; text-align: center; page-break-inside: avoid; break-inside: avoid; }
+figure.figura img { max-width: 100%; max-height: 70vh; }
+figure.figura figcaption, .legenda-solta { text-indent: 0; text-align: center; font-style: italic; font-size: 0.85em; margin-top: 0.5em; }
+.epigrafe-cap { margin: 0 0 2em 35%; font-style: italic; font-size: 0.92em; }
+.epigrafe-cap p { text-indent: 0; text-align: left; }
+.epigrafe-cap .quem { font-style: normal; text-align: right; font-size: 0.9em; margin-top: 0.4em; }
+.final .foto { text-align: center; margin: 0 0 1.4em; }
+.final .foto img { max-width: 40%; }
 nav#toc ol { list-style: none; padding: 0; }
 nav#toc li { margin: 0.4em 0; }
 nav#toc a { text-decoration: none; }
@@ -212,7 +327,7 @@ interface SpineItem {
   props?: string
 }
 
-export async function exportEpub(dir: string): Promise<EpubResult> {
+export async function exportEpub(dir: string, resourcesDir?: string): Promise<EpubResult> {
   const project = await openProject(dir)
   const meta = project.meta
   const l = resolveLayout(meta.layout)
@@ -243,17 +358,58 @@ export async function exportEpub(dir: string): Promise<EpubResult> {
     spine.push(item)
   }
 
-  zip.file(`${O}estilo.css`, CSS.replace('COR', l.dropCapColor))
+  // fonte do miolo embutida quando é uma fonte OFL que vem com o Folio (resources/fonts)
+  const fonte = resourcesDir ? await bundledFont(resourcesDir, l.font) : null
+  const fontFaces: string[] = []
+  if (fonte) {
+    fonte.files.forEach((f, i) => {
+      const href = `fontes/${f.name}`
+      zip.file(O + href, f.data)
+      add(`fonte-${i + 1}`, href, 'font/ttf')
+      fontFaces.push(`@font-face { font-family: "${l.font}"; font-style: ${f.italic ? 'italic' : 'normal'}; font-weight: ${f.weight}; src: url("${href}"); }`)
+    })
+  }
+  zip.file(
+    `${O}estilo.css`,
+    CSS.replace('COR', l.dropCapColor).replace('FONTE', fonte ? `"${l.font}", ` : '').replace('@charset "UTF-8";', `@charset "UTF-8";\n${fontFaces.join('\n')}`)
+  )
   add('css', 'estilo.css', 'text/css')
 
+  // imagens: tipo de mídia pelo conteúdo real do arquivo (PNG ou JPEG), não pelo nome
+  const imagem = async (id: string, base: string, path: string, props?: string): Promise<string | null> => {
+    const data = await readFile(path)
+    const kind = imageKind(data)
+    if (!kind || kind === 'webp') return null
+    const href = `imagens/${base}.${EXT[kind]}`
+    zip.file(O + href, data)
+    add(id, href, mediaType(kind), props)
+    return href
+  }
+  const imgs: ImgSink = { map: new Map() }
+  let figuras = 0
+  const figura = async (name: string): Promise<void> => {
+    if (imgs.map.has(name)) return
+    const path = join(dir, 'assets', name)
+    try {
+      const href = await imagem(`fig-${imgs.map.size + 1}`, `fig-${name.replace(/\.[a-z]+$/, '')}`, path)
+      if (href) {
+        imgs.map.set(name, href)
+        figuras += 1
+      }
+    } catch {
+      /* arquivo sumiu: fica só a legenda */
+    }
+  }
+  for (const c of chapters) for (const b of parseBody(c.body).blocks) if (b.t === 'figure' && b.src) await figura(b.src)
+
   // capa
-  const capa = await capaFrentePath(dir)
-  if (capa) {
-    zip.file(`${O}imagens/capa.png`, await readFile(capa))
-    add('capa-img', 'imagens/capa.png', 'image/png', 'cover-image')
+  const capaPath = await capaFrentePath(dir)
+  const capaHref = capaPath ? await imagem('capa-img', 'capa', capaPath, 'cover-image') : null
+  const capa = Boolean(capaHref)
+  if (capaHref) {
     xhtml(
       { id: 'capa', href: 'capa.xhtml', title: 'Capa', inToc: false },
-      page('Capa', `<section class="capa" epub:type="cover" role="doc-cover"><img src="imagens/capa.png" alt="Capa: ${esc(meta.title)}"/></section>`, 'frontmatter')
+      page('Capa', `<section class="capa" epub:type="cover" role="doc-cover"><img src="${capaHref}" alt="Capa: ${esc(meta.title)}"/></section>`, 'frontmatter')
     )
   }
 
@@ -319,15 +475,50 @@ ${f.editora.trim() ? `<p class="editora">${esc(f.editora.trim())}</p>` : ''}
     const artSrc = await aberturaPath(dir, c.file)
     let art: string | null = null
     if (artSrc) {
-      const name = `imagens/abertura-${i + 1}.png`
-      zip.file(O + name, await readFile(artSrc))
-      add(`abertura-${i + 1}`, name, 'image/png')
-      art = name
-      arts += 1
+      art = await imagem(`abertura-${i + 1}`, `abertura-${i + 1}`, artSrc)
+      if (art) arts += 1
     }
-    const r = chapterXhtml(c, nums[i] ?? 0, i + 1, l, art)
+    const r = chapterXhtml(c, nums[i] ?? 0, i + 1, l, art, imgs)
     notes += r.notes
     xhtml({ id: `cap-${i + 1}`, href: `cap-${String(i + 1).padStart(3, '0')}.xhtml`, title: r.heading, inToc: true }, r.xhtml)
+  }
+
+  // páginas finais: posfácio, agradecimentos, sobre o autor (entram no sumário)
+  const finais: Array<{ id: string; titulo: string; tipo: string; role: string; md: string; foto?: string | null }> = []
+  if (f.posfacio && f.posfacioTexto.trim()) finais.push({ id: 'posfacio', titulo: 'Posfácio', tipo: 'afterword', role: 'doc-afterword', md: f.posfacioTexto })
+  if (f.agradecimentos && f.agradecimentosTexto.trim())
+    finais.push({ id: 'agradecimentos', titulo: 'Agradecimentos', tipo: 'acknowledgments', role: 'doc-acknowledgments', md: f.agradecimentosTexto })
+  if (f.sobreAutor && (f.sobreAutorTexto.trim() || f.sobreAutorFoto)) {
+    let foto: string | null = null
+    const nome = assetName(f.sobreAutorFoto)
+    if (nome) {
+      try {
+        foto = await imagem('autor-foto', 'autor-foto', join(dir, 'assets', nome))
+      } catch {
+        foto = null
+      }
+    }
+    finais.push({ id: 'sobre-autor', titulo: 'Sobre o autor', tipo: 'contributors', role: '', md: f.sobreAutorTexto, foto })
+  }
+  for (const fin of finais) {
+    const blocks = parseBody(fin.md).blocks
+    for (const b of blocks) if (b.t === 'figure' && b.src) await figura(b.src)
+    const sink: NoteSink = { notes: [], prefix: `${fin.id}-` }
+    const corpo = blocksXhtml(blocks, sink, imgs, SCENE_TEXT[l.sceneOrnament] ?? '⁂', false)
+    const foto = fin.foto ? `<p class="foto"><img src="${fin.foto}" alt="Foto de ${esc(meta.author || 'quem escreveu')}"/></p>` : ''
+    xhtml(
+      { id: fin.id, href: `${fin.id}.xhtml`, title: fin.titulo, inToc: true },
+      page(
+        fin.titulo,
+        `<section class="final" epub:type="${fin.tipo}"${fin.role ? ` role="${fin.role}"` : ''} aria-labelledby="titulo">
+<header class="abertura-cap"><h1 id="titulo">${esc(fin.titulo)}</h1></header>
+${foto}
+${corpo}
+${notesSection(sink)}
+</section>`,
+        'backmatter'
+      )
+    )
   }
 
   if (f.colofao) {
@@ -392,6 +583,13 @@ ${f.editora.trim() ? `<dc:publisher>${esc(f.editora.trim())}</dc:publisher>` : '
 ${l.cover.sinopse.trim() ? `<dc:description>${esc(l.cover.sinopse.trim())}</dc:description>` : ''}
 <dc:rights>© ${esc(f.ano.trim() || date.slice(0, 4))} ${esc(meta.author || '')}</dc:rights>
 <meta property="dcterms:modified">${modified}</meta>
+<meta property="schema:accessMode">textual</meta>
+${arts || figuras || capa ? '<meta property="schema:accessMode">visual</meta>\n' : ''}<meta property="schema:accessModeSufficient">textual</meta>
+<meta property="schema:accessibilityFeature">structuralNavigation</meta>
+<meta property="schema:accessibilityFeature">tableOfContents</meta>
+<meta property="schema:accessibilityFeature">readingOrder</meta>
+${arts || figuras || capa ? '<meta property="schema:accessibilityFeature">alternativeText</meta>\n' : ''}<meta property="schema:accessibilityHazard">none</meta>
+<meta property="schema:accessibilitySummary">${esc(acessibilidade(notes, arts + figuras + (capa ? 1 : 0)))}</meta>
 ${capa ? '<meta name="cover" content="capa-img"/>' : ''}
 </metadata>
 <manifest>
@@ -409,5 +607,5 @@ ${spine.map((s) => `<itemref idref="${s.id}"${s.linear === false ? ' linear="no"
   await mkdir(outDir, { recursive: true })
   const epubPath = join(outDir, `${slugify(meta.title)}.epub`)
   await writeFile(epubPath, buf)
-  return { epubPath, capitulos: chapters.length, notas: notes, capa: Boolean(capa), aberturas: arts, bytes: buf.length }
+  return { epubPath, capitulos: chapters.length, notas: notes, capa, aberturas: arts, figuras, fonte: fonte ? l.font : null, bytes: buf.length }
 }

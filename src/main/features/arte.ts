@@ -78,25 +78,39 @@ async function acharEstilo(dir: string, id: string): Promise<EstiloArte> {
   return todos.find((e) => e.id === id) ?? todos.find((e) => e.id === ESTILO_PADRAO)!
 }
 
+/**
+ * Capítulo + metadados de cena. O Manuscrito grava a cena dentro da chave
+ * `cena:` do front-matter (ver project.ts); livros antigos podem ter
+ * sinopse/pov/cenario/notas soltos no topo — esses só preenchem o que faltar.
+ */
 async function lerCapitulo(dir: string, file: string): Promise<{ title: string; body: string; meta: CenaMeta }> {
   const c = await readChapter(dir, file)
-  let meta: CenaMeta = {}
+  const cena: CenaMeta = c.cena ?? {}
+  let topo: Record<string, unknown> = {}
   try {
     const raw = await readFile(join(dir, 'manuscrito', file), 'utf8')
     const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/)
-    const fm = (m ? YAML.parse(m[1] ?? '') : null) as Record<string, unknown> | null
-    if (fm && typeof fm === 'object') {
-      const t = (k: string): string | undefined => (typeof fm[k] === 'string' ? (fm[k] as string) : undefined)
-      meta = { sinopse: t('sinopse'), pov: t('pov'), cenario: t('cenario'), notas: t('notas') }
-    }
+    const fm: unknown = m ? YAML.parse(m[1] ?? '') : null
+    if (fm && typeof fm === 'object' && !Array.isArray(fm)) topo = fm as Record<string, unknown>
   } catch {
-    /* sem front-matter de cena */
+    /* sem front-matter */
   }
+  const campo = (k: keyof CenaMeta): string | undefined => {
+    const v = cena[k]
+    if (typeof v === 'string' && v.trim()) return v
+    return typeof topo[k] === 'string' && (topo[k] as string).trim() ? (topo[k] as string) : undefined
+  }
+  const meta: CenaMeta = { sinopse: campo('sinopse'), pov: campo('pov'), cenario: campo('cenario'), notas: campo('notas') }
   return { title: c.title, body: c.body, meta }
 }
 
 // metadados de geração em memória (carregados uma vez por livro)
 const metas = new Map<string, Map<string, GeracaoMeta>>()
+
+/** Descarta o cache de metadados do livro (depois de remapear capítulos, por exemplo). */
+export function esquecerGeracoes(dir: string): void {
+  metas.delete(dir)
+}
 
 async function metasDe(dir: string): Promise<Map<string, GeracaoMeta>> {
   let m = metas.get(dir)

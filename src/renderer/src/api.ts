@@ -1,4 +1,4 @@
-import type { ChapterContent, ExportResult, LayoutSettings, Project, RecentProject, SaveResult } from '../../shared/types'
+import type { ChapterContent, ExportResult, LayoutSettings, PerfilPdf, Project, RecentProject, SaveResult } from '../../shared/types'
 
 interface FolioIpc {
   invoke(method: string, args: unknown[]): Promise<unknown>
@@ -49,7 +49,7 @@ export const folio = {
     call<SaveResult>('saveChapter', dir, file, title, body),
   addChapter: (dir: string, title: string) => call<Project>('addChapter', dir, title),
   saveLayout: (dir: string, layout: LayoutSettings) => call<Project>('saveLayout', dir, layout),
-  exportPrintPdf: (dir: string) => call<ExportResult>('exportPrintPdf', dir),
+  exportPrintPdf: (dir: string, perfil: PerfilPdf = 'grafica') => call<ExportResult>('exportPrintPdf', dir, perfil),
   revealFile: (path: string) => openExport(path),
   openExternal: (url: string) => (isWeb ? Promise.resolve(void window.open(url, '_blank', 'noopener')) : call<void>('openExternal', url)),
   docs: {

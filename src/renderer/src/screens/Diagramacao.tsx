@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { ScreenProps } from '../screen'
 import { call, folio, isWeb, openExport } from '../api'
-import type { ChapterLayout, ExportResult } from '../../../shared/types'
+import type { ChapterLayout, ExportResult, PerfilPdf } from '../../../shared/types'
 import { Mesa } from '../features/diagramacao/Mesa'
 import { Painel } from '../features/diagramacao/Painel'
 import { CapaTab } from '../features/diagramacao/CapaTab'
 import { EbookTab } from '../features/diagramacao/EbookTab'
+import { EpigrafeCapitulo } from '../features/diagramacao/EpigrafeCapitulo'
 import { Ico } from '../features/diagramacao/icons'
 import {
   DROPCAPS,
@@ -22,6 +23,12 @@ import {
 import './diagramacao.css'
 
 type Tab = 'miolo' | 'capa' | 'ebook'
+
+const PERFIS: { v: PerfilPdf; label: string; dica: string }[] = [
+  { v: 'grafica', label: 'PDF da gráfica', dica: 'Sangria nos 4 lados e marcas de corte, como configurado' },
+  { v: 'kdp', label: 'PDF KDP impresso', dica: 'Sangria de 3,2 mm só em cima, embaixo e na borda externa; sem marcas (especificação do KDP)' },
+  { v: 'tela', label: 'PDF para tela', dica: 'Formato final, sem sangria nem marcas, sem páginas em branco; sumário com links' }
+]
 
 const TABS: { v: Tab; label: string }[] = [
   { v: 'miolo', label: 'Miolo' },
@@ -56,7 +63,9 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
   const [fontes, setFontes] = useState<FonteDisponivel[]>([])
   const [checks, setChecks] = useState<ItemChecagem[] | null>(null)
   const [checking, setChecking] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState<PerfilPdf | null>(null)
+  const [epiAberta, setEpiAberta] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<PerfilPdf>('grafica')
   const [pdf, setPdf] = useState<ExportResult | null>(null)
   const saveTimer = useRef<number | null>(null)
   const pending = useRef<FullLayout | null>(null)
@@ -192,18 +201,18 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
     }
   }
 
-  const gerarPdf = async (): Promise<void> => {
-    setExporting(true)
+  const gerarPdf = async (perfil: PerfilPdf = 'grafica'): Promise<void> => {
+    setExporting(perfil)
     setErr(null)
     try {
       await flush()
-      const r = await folio.exportPrintPdf(dir)
+      const r = await folio.exportPrintPdf(dir, perfil)
       setPdf(r)
       await openExport(r.pdfPath)
     } catch (e) {
       setErr(errText(e))
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -242,8 +251,23 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
         <button type="button" className="btn" disabled={checking} onClick={() => void checar()}>
           <Ico name="checar" /> {checking ? 'Checando…' : 'Checar arquivo'}
         </button>
-        <button type="button" className="btn pri" disabled={exporting} onClick={() => void gerarPdf()}>
-          <Ico name="pdf" /> {exporting ? 'Gerando PDF…' : 'Gerar PDF da gráfica'}
+        <label className="dg-perfil">
+          <span className="sr-only">Perfil do PDF</span>
+          <select
+            className="select"
+            value={perfil}
+            title={PERFIS.find((p) => p.v === perfil)?.dica}
+            onChange={(e) => setPerfil(e.target.value as PerfilPdf)}
+          >
+            {PERFIS.map((p) => (
+              <option key={p.v} value={p.v} title={p.dica}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="btn pri" disabled={exporting !== null} title={PERFIS.find((p) => p.v === perfil)?.dica} onClick={() => void gerarPdf(perfil)}>
+          <Ico name="pdf" /> {exporting ? 'Gerando PDF…' : 'Gerar PDF'}
         </button>
       </div>
 
@@ -285,7 +309,23 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
                         <option key={o.v} value={o.v}>{o.label.startsWith('Sem') ? 'Sem capitular' : `Capitular: ${o.label.replace('Capitular ', '')}`}</option>
                       ))}
                     </select>
+                    <button
+                      type="button"
+                      className="dg-mini dg-epi-btn"
+                      aria-expanded={epiAberta === c.file}
+                      onClick={() => setEpiAberta((x) => (x === c.file ? null : c.file))}
+                    >
+                      Epígrafe…
+                    </button>
                   </div>
+                  {epiAberta === c.file && (
+                    <EpigrafeCapitulo
+                      dir={dir}
+                      file={c.file}
+                      titulo={c.title}
+                      onSalvo={() => setVersion((v) => v + 1)}
+                    />
+                  )}
                 </div>
               )
             })}
@@ -356,7 +396,7 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
             )}
           </section>
 
-          <Painel l={l} set={set} pages={total || null} fontes={fontes} checks={checks} checking={checking} />
+          <Painel dir={dir} l={l} set={set} pages={total || null} fontes={fontes} checks={checks} checking={checking} />
         </div>
       )}
 

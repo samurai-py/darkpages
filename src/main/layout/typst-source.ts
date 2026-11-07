@@ -1,5 +1,5 @@
-import type { ChapterContent, ProjectMeta } from '../../shared/types'
-import { parseBody, type Block, type Inline } from './markdown'
+import type { ChapterContent, EpigrafeCap, PerfilPdf, ProjectMeta } from '../../shared/types'
+import { assetName, parseBody, parseInline, type Block, type Inline } from './markdown'
 import { chapterLabelText, numberChapters, showsTitle } from './labels'
 import { chapterDropCap, chapterOpening, resolveLayout, type FullLayout } from './settings'
 
@@ -22,9 +22,50 @@ export const SLUG_MM = 8
 /** As marcas de corte param antes da sangria, para não aparecerem no livro. */
 const MARK_GAP_MM = 1
 
+/** KDP: 0,125 pol de sangria em cima, embaixo e na borda externa (nunca na lombada). */
+export const KDP_BLEED_MM = 3.175
+
 export interface BookAssets {
   /** arquivo do capítulo → caminho da arte de abertura relativo à pasta .build (raiz do Typst) */
   aberturas: Map<string, string>
+  /** nome em assets/ (figuras do texto, foto do autor) → caminho relativo à pasta .build */
+  imagens?: Map<string, string>
+}
+
+/** Geometria da folha do PDF conforme o perfil de saída. */
+export interface PdfGeometry {
+  pageWmm: number
+  pageHmm: number
+  /** acréscimo de cada margem (sangria + área de marcas) */
+  top: number
+  bottom: number
+  inside: number
+  outside: number
+  marks: boolean
+  /** retângulo da arte sangrada (página inteira menos a área de marcas) */
+  artX: number
+  artY: number
+  artW: number
+  artH: number
+  /** distância da borda da folha até a sangria (área de marcas), para as marcas de corte */
+  slug: number
+  bleed: number
+}
+
+export function pdfGeometry(l: FullLayout, perfil: PerfilPdf = 'grafica'): PdfGeometry {
+  const W = l.trim.widthMm
+  const H = l.trim.heightMm
+  if (perfil === 'kdp') {
+    // folha = formato + 1 sangria na largura (só a borda externa) + 2 na altura; sem marcas de corte
+    const B = KDP_BLEED_MM
+    return { pageWmm: W + B, pageHmm: H + 2 * B, top: B, bottom: B, inside: 0, outside: B, marks: false, artX: 0, artY: 0, artW: W + B, artH: H + 2 * B, slug: 0, bleed: B }
+  }
+  if (perfil === 'tela') {
+    return { pageWmm: W, pageHmm: H, top: 0, bottom: 0, inside: 0, outside: 0, marks: false, artX: 0, artY: 0, artW: W, artH: H, slug: 0, bleed: 0 }
+  }
+  const B = l.bleedMm
+  const S = B + (l.cropMarks ? SLUG_MM : 0)
+  return { pageWmm: W + 2 * S, pageHmm: H + 2 * S, top: S, bottom: S, inside: S, outside: S, marks: l.cropMarks, artX: S - B, artY: S - B, artW: W + 2 * B, artH: H + 2 * B, slug: S - B, bleed: B }
 }
 
 export function str(s: string): string {
@@ -66,7 +107,11 @@ export function inlineTypst(c: Inline[]): string {
 
 /** Compatibilidade: ênfases de Markdown em uma linha → Typst. */
 export function inlineToTypst(text: string): string {
-  return inlineTypst(parseBody(text).blocks.flatMap((b) => (b.t === 'scene' ? [] : b.c)))
+  return inlineTypst(
+    parseBody(text).blocks.flatMap((b): Inline[] =>
+      b.t === 'p' || b.t === 'sub' ? b.c : b.t === 'quote' ? b.c.flat() : b.t === 'figure' ? b.caption : []
+    )
+  )
 }
 
 type Wrap = 'em' | 'strong'
@@ -119,17 +164,42 @@ function splitInitial(c: Inline[]): { initial: string; rest: Inline[] } | null {
   return { initial: punct + letter, rest }
 }
 
-function paragraphTypst(b: Block): string {
+function paragraphTypst(b: Block, imagens: Map<string, string>): string {
   switch (b.t) {
     case 'scene':
       return '#quebra-cena()'
+    case 'pagebreak':
+      return '#pagebreak(weak: true)'
     case 'quote':
-      return `#citacao[${inlineTypst(b.c)}]`
+      // cada parágrafo da citação continua parágrafo (linha em branco entre eles)
+      return `#citacao[${b.c.map(inlineTypst).join('\n\n')}]`
     case 'sub':
       return `#heading(level: 2, outlined: false)[${inlineTypst(b.c)}]`
+    case 'figure': {
+      const cap = b.caption.length ? `[${inlineTypst(b.caption)}]` : 'none'
+      const img = b.src ? imagens.get(b.src) : undefined
+      // sem o arquivo, fica só a legenda (a checagem avisa)
+      return img ? `#figura(${str(img)}, ${cap})` : b.caption.length ? `#legenda-solta(${cap})` : ''
+    }
     case 'p':
       return inlineTypst(b.c)
   }
+}
+
+/** Texto curto de várias linhas (epígrafe) → conteúdo Typst com quebras de linha; aceita *itálico*. */
+export function linhasInline(texto: string): Inline[][] {
+  return texto
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => parseInline(l, []))
+}
+
+function epigrafeTypst(e: EpigrafeCap | undefined): string {
+  if (!e || !e.texto.trim()) return ''
+  const who = e.autor?.trim() ? str('— ' + e.autor.trim()) : 'none'
+  return `#epigrafe-cap[${linhasInline(e.texto).map(inlineTypst).join('#linebreak()')}][${who === 'none' ? '' : `#${who}`}]`
 }
 
 function firstParagraph(b: Block & { t: 'p' }, style: string, l: FullLayout): string {
@@ -149,6 +219,7 @@ function firstParagraph(b: Block & { t: 'p' }, style: string, l: FullLayout): st
 interface ChapterCtx {
   l: FullLayout
   assets: BookAssets
+  imagens: Map<string, string>
 }
 
 function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx): string {
@@ -170,6 +241,7 @@ function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx): string {
           : `#abertura-classica(${args})`
 
   const { blocks } = parseBody(c.body)
+  const epi = epigrafeTypst(c.epigrafe)
   const drop = chapterDropCap(l, c.file)
   let firstDone = false
   let prev: Block['t'] | 'abertura' = 'abertura'
@@ -180,14 +252,14 @@ function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx): string {
       firstDone = true
       return firstParagraph(b, drop, l)
     }
-    if (b.t !== 'scene') firstDone = true
-    // depois de abertura, quebra de cena ou intertítulo o parágrafo começa sem recuo
-    if (b.t === 'p' && (before === 'scene' || before === 'sub' || before === 'abertura')) {
+    if (b.t !== 'scene' && b.t !== 'pagebreak') firstDone = true
+    // depois de abertura, quebra de cena, quebra de página, figura ou intertítulo o parágrafo começa sem recuo
+    if (b.t === 'p' && (before === 'scene' || before === 'sub' || before === 'abertura' || before === 'pagebreak' || before === 'figure')) {
       return `#sem-recuo[${inlineTypst(b.c)}]`
     }
-    return paragraphTypst(b)
+    return paragraphTypst(b, ctx.imagens)
   })
-  return `${opening}\n\n${body.join('\n\n')}\n\n#marca("fim")`
+  return `${opening}\n\n${epi ? `${epi}\n\n` : ''}${body.join('\n\n')}\n\n#marca("fim")`
 }
 
 function cropMarks(l: FullLayout, S: number): string {
@@ -230,7 +302,7 @@ function frontMatter(meta: ProjectMeta, l: FullLayout): string {
   const author = str(meta.author || '')
   if (f.falsoRosto) {
     out.push(`// Falso rosto
-#pagebreak(to: "odd", weak: true)
+#pagebreak(to: pag-impar, weak: true)
 #marca("pre")
 #v(28%)
 #align(center, text(size: 1.35em, tracking: 0.06em, ${title}))`)
@@ -239,7 +311,7 @@ function frontMatter(meta: ProjectMeta, l: FullLayout): string {
     const sub = f.subtitulo.trim() ? `#v(0.8em)\n#align(center, text(size: 1.1em, style: "italic", ${str(f.subtitulo.trim())}))` : ''
     const edit = [f.editora.trim(), [f.cidade.trim(), f.ano.trim()].filter(Boolean).join(' · ')].filter(Boolean)
     out.push(`// Rosto
-#pagebreak(to: "odd", weak: true)
+#pagebreak(to: pag-impar, weak: true)
 #marca("pre")
 #v(18%)
 #align(center, text(size: 0.95em, tracking: 0.24em, upper(${author})))
@@ -257,7 +329,7 @@ ${edit.length ? `#align(center, ornamento())\n#v(0.6em)\n#align(center, text(siz
     const isbn = f.isbn.trim()
     const pub = [f.editora.trim(), f.cidade.trim()].filter(Boolean).join(' · ')
     out.push(`// Créditos e ficha catalográfica
-#pagebreak(to: "even", weak: true)
+#pagebreak(to: pag-par, weak: true)
 #marca("pre")
 #set par(first-line-indent: 0pt, justify: false)
 #set text(size: 0.78em)
@@ -276,7 +348,7 @@ ${pub ? `\n\n#${str(pub)}` : ''}`)
   }
   if (f.dedicatoria && f.dedicatoriaTexto.trim()) {
     out.push(`// Dedicatória
-#pagebreak(to: "odd", weak: true)
+#pagebreak(to: pag-impar, weak: true)
 #marca("pre")
 #v(30%)
 #align(right, block(width: 60%, align(right, text(style: "italic", ${lines(f.dedicatoriaTexto.trim())}))))`)
@@ -284,7 +356,7 @@ ${pub ? `\n\n#${str(pub)}` : ''}`)
   if (f.epigrafe && f.epigrafeTexto.trim()) {
     const who = f.epigrafeAutor.trim() ? `\n#v(0.6em)\n#align(right, text(size: 0.9em, ${str('— ' + f.epigrafeAutor.trim())}))` : ''
     out.push(`// Epígrafe
-#pagebreak(to: "odd", weak: true)
+#pagebreak(to: pag-impar, weak: true)
 #marca("pre")
 #v(30%)
 #align(right, block(width: 66%, {
@@ -294,7 +366,7 @@ ${pub ? `\n\n#${str(pub)}` : ''}`)
   }
   if (f.sumario) {
     out.push(`// Sumário
-#pagebreak(to: "odd", weak: true)
+#pagebreak(to: pag-impar, weak: true)
 #marca("pre")
 #v(12%)
 #align(center, text(size: 1.5em, ${str('Sumário')}))
@@ -309,13 +381,49 @@ function indentBlock(markup: string): string {
   return `[\n${markup}\n]`
 }
 
+/** Corpo em Markdown simples das páginas finais → parágrafos Typst (o primeiro sem recuo). */
+function textoCorrido(md: string, imagens: Map<string, string>): string {
+  const { blocks } = parseBody(md)
+  let prev: Block['t'] | 'inicio' = 'inicio'
+  return blocks
+    .map((b) => {
+      const before = prev
+      prev = b.t
+      if (b.t === 'p' && (before === 'inicio' || before === 'scene' || before === 'sub' || before === 'pagebreak' || before === 'figure')) return `#sem-recuo[${inlineTypst(b.c)}]`
+      return paragraphTypst(b, imagens)
+    })
+    .join('\n\n')
+}
+
+/** Páginas finais: posfácio, agradecimentos e sobre o autor (cada uma abre em página ímpar e entra no sumário). */
+function backMatter(l: FullLayout, imagens: Map<string, string>): string {
+  const f = l.front
+  const out: string[] = []
+  const secao = (titulo: string, corpo: string): void => {
+    out.push(`// ${titulo}
+#pagina-final(${str(titulo)})
+
+${corpo}
+
+#marca("fim")`)
+  }
+  if (f.posfacio && f.posfacioTexto.trim()) secao('Posfácio', textoCorrido(f.posfacioTexto, imagens))
+  if (f.agradecimentos && f.agradecimentosTexto.trim()) secao('Agradecimentos', textoCorrido(f.agradecimentosTexto, imagens))
+  if (f.sobreAutor && (f.sobreAutorTexto.trim() || f.sobreAutorFoto)) {
+    const foto = f.sobreAutorFoto ? imagens.get(assetName(f.sobreAutorFoto) ?? '') : undefined
+    const img = foto ? `#align(center, block(below: 1.6em, image(${str(foto)}, width: 38%)))\n\n` : ''
+    secao('Sobre o autor', img + textoCorrido(f.sobreAutorTexto, imagens))
+  }
+  return out.join('\n\n')
+}
+
 function colophon(meta: ProjectMeta, l: FullLayout): string {
   if (!l.front.colofao) return ''
   const text =
     l.front.colofaoTexto.trim() ||
     `Este livro foi composto em ${l.font}, corpo ${String(l.bodyPt).replace('.', ',')}, e diagramado no Folio.`
   return `// Colofão
-#pagebreak(to: "even", weak: true)
+#pagebreak(to: pag-par, weak: true)
 #{[
 #marca("pre")
 #v(1fr)
@@ -338,14 +446,33 @@ const ORNAMENTS: Record<string, string> = {
   espaco: 'none'
 }
 
-export function buildBookTypst(meta: ProjectMeta, chapters: ChapterContent[], assets: BookAssets = { aberturas: new Map() }): string {
+/** Nomes em assets/ das imagens que o miolo usa (figuras do texto e foto do autor), para copiar para .build/. */
+export function bookImageNames(meta: ProjectMeta, chapters: ChapterContent[]): string[] {
+  const out: string[] = []
+  for (const c of chapters) for (const b of parseBody(c.body).blocks) if (b.t === 'figure' && b.src) out.push(b.src)
   const l = resolveLayout(meta.layout)
-  const S = l.bleedMm + (l.cropMarks ? SLUG_MM : 0)
-  const B = l.bleedMm
+  for (const t of [l.front.posfacioTexto, l.front.agradecimentosTexto, l.front.sobreAutorTexto]) {
+    for (const b of parseBody(t).blocks) if (b.t === 'figure' && b.src) out.push(b.src)
+  }
+  const foto = assetName(l.front.sobreAutorFoto)
+  if (foto && l.front.sobreAutor) out.push(foto)
+  return out
+}
+
+export function buildBookTypst(
+  meta: ProjectMeta,
+  chapters: ChapterContent[],
+  assets: BookAssets = { aberturas: new Map() },
+  perfil: PerfilPdf = 'grafica'
+): string {
+  const l = resolveLayout(meta.layout)
+  const g = pdfGeometry(l, perfil)
+  const tela = perfil === 'tela'
+  const imagens = assets.imagens ?? new Map<string, string>()
   const leadingEm = Math.max(0.3, l.lineHeight - 0.7)
   const textWidthMm = l.trim.widthMm - l.margins.insideMm - l.margins.outsideMm
   const nums = numberChapters(chapters)
-  const ctx: ChapterCtx = { l, assets }
+  const ctx: ChapterCtx = { l, assets, imagens }
   const body = chapters.map((c, i) => chapterTypst(c, nums[i] ?? 0, ctx)).join('\n\n')
   const orn = ORNAMENTS[l.sceneOrnament] ?? ORNAMENTS['asterismo']
   const headerAscent = Math.max(4, l.margins.topMm * 0.45)
@@ -360,6 +487,9 @@ export function buildBookTypst(meta: ProjectMeta, chapters: ChapterContent[], as
 #let caixa-rotulo(r) = if rotulo-caixa == "versalete" { smallcaps(r) } else { r }
 #let folio-pos = ${str(l.folio)}
 #let largura-texto = ${mm(textWidthMm)}
+// perfil ${perfil}: ${tela ? 'PDF para tela (sem sangria, sem páginas em branco para forçar ímpar)' : perfil === 'kdp' ? 'KDP impresso (sangria só nas bordas de corte, sem marcas)' : 'gráfica (sangria e marcas conforme o projeto)'}
+#let pag-impar = ${tela ? 'none' : '"odd"'}
+#let pag-par = ${tela ? 'none' : '"even"'}
 
 // ---------- marcadores ----------
 #let marca(tipo, ..dados) = [#metadata((tipo: tipo, ..dados.named()))<folio-marca>]
@@ -380,13 +510,13 @@ export function buildBookTypst(meta: ProjectMeta, chapters: ChapterContent[], as
 
 // ---------- página ----------
 #set page(
-  width: ${mm(l.trim.widthMm + 2 * S)},
-  height: ${mm(l.trim.heightMm + 2 * S)},
+  width: ${mm(g.pageWmm)},
+  height: ${mm(g.pageHmm)},
   margin: (
-    top: ${mm(l.margins.topMm + S)},
-    bottom: ${mm(l.margins.bottomMm + S)},
-    inside: ${mm(l.margins.insideMm + S)},
-    outside: ${mm(l.margins.outsideMm + S)},
+    top: ${mm(l.margins.topMm + g.top)},
+    bottom: ${mm(l.margins.bottomMm + g.bottom)},
+    inside: ${mm(l.margins.insideMm + g.inside)},
+    outside: ${mm(l.margins.outsideMm + g.outside)},
   ),
   header-ascent: ${mm(headerAscent)},
   footer-descent: ${mm(footerDescent)},
@@ -415,7 +545,7 @@ export function buildBookTypst(meta: ProjectMeta, chapters: ChapterContent[], as
     }
   },
   foreground: {
-${l.cropMarks ? cropMarks(l, S) : '  none'}
+${g.marks ? cropMarks(l, g.slug + g.bleed) : '  none'}
   },
 )
 
@@ -471,10 +601,37 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 
 #let quebra-cena() = block(width: 100%, above: 1.15em, below: 1.15em, align(center, ${orn === 'none' ? 'v(0.2em)' : orn}))
 #let citacao(corpo) = block(above: 1em, below: 1em, inset: (left: 1.6em, right: 1.6em), {
-  set par(first-line-indent: 0pt)
+  set par(first-line-indent: 0pt, spacing: 0.7em)
   set text(size: 0.94em)
   corpo
 })
+
+// ---------- figuras, epígrafe de capítulo, páginas finais ----------
+#show figure.caption: set text(size: 0.84em, style: "italic")
+#show figure.caption: set par(justify: false, first-line-indent: 0pt)
+/// Imagem do texto na largura da mancha (ou menor, se for alta: no máximo 72% da altura útil), com legenda.
+#let figura(caminho, legenda) = block(width: 100%, above: 1.3em, below: 1.3em, breakable: false, layout(area => {
+  let nat = measure(image(caminho))
+  let maxh = area.height * 0.72
+  let h = area.width * (nat.height / nat.width)
+  let w = if h > maxh { maxh * (nat.width / nat.height) } else { area.width }
+  figure(image(caminho, width: w), caption: legenda, numbering: none, gap: 0.65em, outlined: false)
+}))
+#let legenda-solta(legenda) = block(width: 100%, above: 1.3em, below: 1.3em, align(center, text(size: 0.84em, style: "italic", legenda)))
+#let epigrafe-cap(corpo, autor) = align(right, block(width: 64%, above: 0.4em, below: 2em, {
+  set par(justify: false, first-line-indent: 0pt, leading: 0.5em)
+  align(left, text(size: 0.9em, style: "italic", corpo))
+  if autor != [] { v(0.5em); align(right, text(size: 0.84em, autor)) }
+}))
+#let pagina-final(titulo) = {
+  pagebreak(to: pag-impar, weak: true)
+  marca("inicio", arquivo: "", titulo: titulo)
+  counter(footnote).update(0)
+  v(20%)
+  heading(level: 1, supplement: none, titulo)
+  align(center, ornamento())
+  v(2.2em)
+}
 
 // ---------- capitulares ----------
 /// Capitular descida: a letra ocupa \`linhas\` linhas; as primeiras palavras
@@ -519,7 +676,7 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 }
 
 #let abertura-classica(rotulo, titulo, arquivo) = {
-  pagebreak(to: "odd", weak: true)
+  pagebreak(to: pag-impar, weak: true)
   comeco(arquivo, titulo, rotulo)
   v(20%)
   rotulo-cap(rotulo)
@@ -529,7 +686,7 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 }
 
 #let abertura-ornamentada(rotulo, titulo, arquivo) = {
-  pagebreak(to: "odd", weak: true)
+  pagebreak(to: pag-impar, weak: true)
   comeco(arquivo, titulo, rotulo)
   v(14%)
   align(center, vinheta(largura: largura-texto * 0.55))
@@ -556,13 +713,13 @@ ${l.cropMarks ? cropMarks(l, S) : '  none'}
 /// Arte de abertura sangrada numa página inteira. \`pagina\`: "impar" (a arte
 /// abre o capítulo e o texto começa no verso) ou "par" (frontispício diante da abertura).
 #let abertura-arte(rotulo, titulo, arquivo, imagem, pagina) = {
-  pagebreak(to: if pagina == "par" { "even" } else { "odd" }, weak: true)
+  pagebreak(to: if pagina == "par" { pag-par } else { pag-impar }, weak: true)
   page(margin: 0pt, header: none, footer: none, {
     marca("arte", arquivo: arquivo)
-    place(top + left, dx: ${mm(S - B)}, dy: ${mm(S - B)},
-      image(imagem, width: ${mm(l.trim.widthMm + 2 * B)}, height: ${mm(l.trim.heightMm + 2 * B)}, fit: "cover"))
+    place(top + left, dx: ${mm(g.artX)}, dy: ${mm(g.artY)},
+      image(imagem, width: ${mm(g.artW)}, height: ${mm(g.artH)}, fit: "cover"))
   })
-  if pagina == "par" { pagebreak(to: "odd", weak: true) }
+  if pagina == "par" { pagebreak(to: pag-impar, weak: true) }
   comeco(arquivo, titulo, rotulo)
   v(12%)
   rotulo-cap(rotulo)
@@ -575,12 +732,14 @@ ${frontMatter(meta, l)}
 
 ${body}
 
+${backMatter(l, imagens)}
+
 ${colophon(meta, l)}
 
 // Mapa para a prévia: página de cada capítulo e total.
 #context [#metadata((
   total: counter(page).final().first(),
-  capitulos: query(<folio-marca>).filter(m => m.value.tipo == "inicio").map(m => (arquivo: m.value.arquivo, pagina: m.location().page())),
+  capitulos: query(<folio-marca>).filter(m => m.value.tipo == "inicio" and m.value.arquivo != "").map(m => (arquivo: m.value.arquivo, pagina: m.location().page())),
 ))<folio-mapa>]
 `
 }

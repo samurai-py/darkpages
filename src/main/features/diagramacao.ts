@@ -1,5 +1,6 @@
-import { bookDir, num, type Handlers } from '../api/context'
-import type { CoverSettings } from '../../shared/types'
+import { bookDir, num, str, type Handlers } from '../api/context'
+import { updateChapterMeta } from '../project'
+import type { CoverSettings, EpigrafeCap } from '../../shared/types'
 import { exportCover } from '../layout/cover-export'
 import { exportEpub } from '../layout/epub'
 import { listFonts } from '../layout/fonts'
@@ -26,6 +27,17 @@ function coverOpts(v: unknown): Partial<CoverSettings> & { paginas?: number } {
   return out
 }
 
+/** Epígrafe de capítulo vinda da interface: null (ou texto vazio) remove. */
+function epigrafe(v: unknown): EpigrafeCap | null {
+  if (v === undefined || v === null) return null
+  if (typeof v !== 'object' || Array.isArray(v)) throw new Error('Epígrafe inválida')
+  const o = v as Record<string, unknown>
+  const texto = typeof o['texto'] === 'string' ? o['texto'].slice(0, 4000) : ''
+  const autor = typeof o['autor'] === 'string' ? o['autor'].slice(0, 300).trim() : ''
+  if (!texto.trim()) return null
+  return autor ? { texto, autor } : { texto }
+}
+
 /** Métodos da feature "diagramacao". */
 export const handlers: Handlers = {
   /** (dir, paginaInicial, quantidade, ppi?) → páginas em PNG (data URL), mapa de capítulos e geometria */
@@ -36,7 +48,10 @@ export const handlers: Handlers = {
   'diagramacao.capa': async (ctx, dir, opts) => exportCover(await bookDir(ctx, dir), ctx.resourcesDir, coverOpts(opts)),
 
   /** (dir) → EPUB 3 em <livro>/export/<slug>.epub */
-  'diagramacao.epub': async (ctx, dir) => exportEpub(await bookDir(ctx, dir)),
+  'diagramacao.epub': async (ctx, dir) => exportEpub(await bookDir(ctx, dir), ctx.resourcesDir),
+
+  /** (dir, arquivo, {texto, autor} | null) → grava só a chave "epigrafe" do front-matter do capítulo → ChapterContent */
+  'diagramacao.epigrafe': async (ctx, dir, file, valor) => updateChapterMeta(await bookDir(ctx, dir), str(file, 200), { epigrafe: epigrafe(valor) }),
 
   /** (dir) → lista {nivel: ok|aviso|erro, texto} */
   'diagramacao.checar': async (ctx, dir) => preflight(await bookDir(ctx, dir), ctx.resourcesDir),

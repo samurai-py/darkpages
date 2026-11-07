@@ -8,7 +8,7 @@ const A = { style: { fill: 'var(--acc)' }, stroke: 'none' } as const
 export type IconeMs =
   | 'mais' | 'menos' | 'busca' | 'ampulheta' | 'fechar' | 'subir' | 'descer' | 'menu' | 'arrastar'
   | 'importar' | 'exportar' | 'alerta' | 'lugar' | 'olho' | 'brilho' | 'nota' | 'cena' | 'lixeira'
-  | 'lapis' | 'anterior' | 'proximo' | 'sair' | 'imagem' | 'eco'
+  | 'lapis' | 'anterior' | 'proximo' | 'sair' | 'imagem' | 'eco' | 'versoes' | 'restaurar'
 
 const P: Record<IconeMs, ReactElement> = {
   mais: <path d="M12 5v14M5 12h14" />,
@@ -126,6 +126,21 @@ const P: Record<IconeMs, ReactElement> = {
       <rect x="3.5" y="5" width="17" height="14" rx="1.5" />
       <path d="M3.5 16l5-5 4 4 2.5-2.5 5.5 5.5" />
       <circle cx="15.5" cy="9" r="1.3" {...A} />
+    </>
+  ),
+  versoes: (
+    <>
+      <circle cx="13" cy="12.5" r="7.5" {...D} />
+      <path d="M5.6 9.6A7.5 7.5 0 1 1 5.5 14" />
+      <path d="M3.2 7.4l2.4 2.2 2.6-1.9" />
+      <path d="M13 8.5v4.3l2.8 1.7" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  restaurar: (
+    <>
+      <path d="M6 4.5h9l3.5 3.5v11.5H6z" {...D} />
+      <path d="M6 4.5h9l3.5 3.5v11.5H6zM15 4.5V8h3.5" />
+      <path d="M14.5 15.5a3 3 0 1 0-1-4.2M13 9.8l.5 1.6 1.6-.5" style={{ stroke: 'var(--acc)' }} />
     </>
   ),
   eco: (
