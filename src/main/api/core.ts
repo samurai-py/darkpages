@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { addChapter, createProject, openProject, readChapter, saveChapter, saveLayout } from '../project'
 import { exportPrintPdf } from '../layout/export'
 import { recentsStore } from '../recents'
-import { deleteDoc, getAsset, getDoc, listDocs, putAsset, putDoc } from '../store/docs'
+import { deleteAsset, deleteDoc, getAsset, getDoc, listDocs, putAsset, putDoc } from '../store/docs'
 import { readSectionMasked, writeSection, type Section } from '../store/settings'
 import { bookDir, str, type Handlers } from './context'
 import type { LayoutSettings } from '../../shared/types'
@@ -55,6 +55,7 @@ export const core: Handlers = {
   // imagens/arquivos (<livro>/assets/<nome>) como data URL
   'assets.put': async (ctx, dir, name, dataUrl) => putAsset(await bookDir(ctx, dir), str(name, 100), str(dataUrl, 30_000_000)),
   'assets.get': async (ctx, dir, name) => getAsset(await bookDir(ctx, dir), str(name, 100)),
+  'assets.delete': async (ctx, dir, name) => deleteAsset(await bookDir(ctx, dir), str(name, 100)),
 
   // configurações por seção (segredos mascarados na leitura)
   'settings.get': async (ctx, section) => readSectionMasked(ctx.dataDir, str(section, 40)),

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Ctx } from './context'
+import { spotifyCallbackRoute } from '../features/sync'
 
 /**
  * Rotas HTTP extras do modo web (ex.: callback de OAuth, download de arquivo).
@@ -8,4 +9,4 @@ import type { Ctx } from './context'
  */
 export type HttpRoute = (ctx: Ctx, req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>
 
-export const httpRoutes: HttpRoute[] = []
+export const httpRoutes: HttpRoute[] = [spotifyCallbackRoute]

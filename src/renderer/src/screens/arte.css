@@ -1,0 +1,201 @@
+/* Arte por IA — tela e painel de Ajustes. Só tokens do tema; acentos chapados. */
+
+.arte { flex: 1; min-width: 0; overflow: auto; padding: 26px 32px 40px; display: flex; flex-direction: column; gap: 20px; }
+
+.arte-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.arte-head h1 { margin: 0; font-size: 34px; }
+.arte-head-nota { margin-left: auto; font-size: 13px; color: var(--muted); }
+
+.arte-eb {
+  margin: 0; font-family: var(--fu); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600;
+}
+.arte-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- abas ---------- */
+.arte-abas { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); }
+.arte-aba {
+  font: inherit; font-size: 13px; font-weight: 600; min-height: 34px; padding: 0 16px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background-color .3s var(--ease), color .2s;
+}
+.arte-aba:hover { color: var(--text); }
+.arte-aba[aria-selected='true'] { background: var(--sel); color: var(--selink); }
+
+.arte-painel { display: flex; flex-direction: column; gap: 22px; }
+.arte-sec { display: flex; flex-direction: column; gap: 12px; }
+.arte-sec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.arte-semente { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ---------- estilos ---------- */
+.arte-estilos { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 14px; }
+.arte-estilo-wrap { position: relative; display: flex; }
+.arte-estilo {
+  font: inherit; color: var(--text); width: 100%; padding: 0; overflow: hidden; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); border-radius: calc(var(--rad) + 4px); background: var(--panel);
+  display: flex; flex-direction: column;
+  transition: transform .3s var(--ease), box-shadow .3s var(--ease), border-color .3s var(--ease);
+}
+.arte-estilo:hover { border-color: var(--muted); transform: translateY(-2px); }
+.arte-estilo[aria-checked='true'] { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); transform: translateY(-4px); }
+.arte-estilo:disabled { opacity: .45; cursor: default; transform: none; }
+.arte-previa { display: block; width: 100%; aspect-ratio: 1; }
+.arte-estilo-nome { padding: 10px 12px 0; font-size: 13px; font-weight: 600; }
+.arte-estilo-pal { padding: 2px 12px 12px; font-size: 11.5px; color: var(--muted); }
+.arte-estilo-novo { border-style: dashed; background: transparent; }
+.arte-estilo-mais { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); border-bottom: 1px dashed var(--line); }
+.arte-estilo-acoes {
+  position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;
+  opacity: 0; transition: opacity .2s var(--ease);
+}
+.arte-estilo-wrap:hover .arte-estilo-acoes, .arte-estilo-acoes:focus-within { opacity: 1; }
+.arte-estilo-acoes .arte-ib { background: var(--bg); border-color: var(--line); }
+.arte-extra { max-width: 620px; }
+
+/* ---------- botão de ícone ---------- */
+.arte-ib {
+  font: inherit; width: 30px; height: 30px; flex: none; padding: 0; border-radius: 999px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: color .2s, border-color .2s var(--ease), background-color .2s var(--ease);
+}
+.arte-ib:hover { color: var(--text); border-color: var(--line); background: var(--chipbg); }
+.arte-ib:disabled { opacity: .35; cursor: default; }
+.arte-ib:disabled:hover { color: var(--muted); border-color: transparent; background: transparent; }
+
+/* ---------- contexto + lote ---------- */
+.arte-linha { display: flex; gap: 18px; flex-wrap: wrap; align-items: stretch; }
+.arte-ctx { flex: 1 1 440px; min-width: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.arte-alvo-sel { margin-left: auto; max-width: 300px; min-height: 34px; font-size: 13px; }
+.arte-nada { margin: 0; }
+.arte-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+.arte-chips .pill { white-space: normal; height: auto; min-height: 30px; padding: 5px 11px; }
+.arte-prompt-l { display: block; }
+.arte-prompt {
+  width: 100%; resize: vertical; min-height: 96px; padding: 12px 14px; border-radius: var(--rad);
+  border: 1px solid transparent; background: var(--hl); color: var(--text);
+  font-family: var(--fb); font-size: 16px; line-height: 1.5;
+  transition: border-color .2s var(--ease);
+}
+.arte-prompt:hover { border-color: var(--line); }
+.arte-prompt:focus { outline: none; border-color: var(--acc); }
+.arte-prompt:disabled { opacity: .6; }
+.arte-aviso { margin: 0; font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--acc); padding-left: 10px; }
+.arte-neg { font-size: 12.5px; color: var(--muted); }
+.arte-neg summary { cursor: pointer; width: fit-content; }
+.arte-neg p { margin: 6px 0 0; }
+.arte-ctx-pe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.arte-ctx-botoes { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.arte-lote { flex: 1 1 280px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; justify-content: space-between; }
+.arte-lote-n { font-size: 30px; font-weight: 600; }
+.arte-barra { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.arte-barra > span { display: block; height: 100%; background: var(--accs); transition: width .6s var(--ease); }
+.arte-lote-nota { font-size: 12.5px; color: var(--muted); }
+.arte-lote-botoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- grade de miniaturas ---------- */
+.arte-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px; }
+.arte-grade-retratos { grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); }
+.arte-grade-capa { grid-template-columns: minmax(0, 280px) minmax(0, 1fr); align-items: end; gap: 22px; }
+.arte-capa-nota { margin: 0; max-width: 420px; font-size: 13px; }
+.arte-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.arte-thumb {
+  font: inherit; padding: 0; width: 100%; overflow: hidden; cursor: pointer; display: block; position: relative;
+  border: 1px solid var(--line); border-radius: var(--rad); background: var(--panel); color: var(--muted);
+  transition: border-color .25s var(--ease), transform .25s var(--ease);
+}
+.arte-thumb:hover { border-color: var(--muted); transform: translateY(-2px); }
+.arte-thumb[aria-pressed='true'] { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.arte-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.arte-tile[data-status='gerando'] .arte-thumb { border-color: var(--acc); }
+.arte-vazio {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted);
+}
+.arte-thumb:has(.tracejado) { border-style: dashed; }
+.arte-vazio.erro { color: var(--alert); }
+.arte-tile[data-status='erro'] .arte-thumb { border-color: var(--alert); }
+.arte-shimmer { position: absolute; inset: 0; display: block; background: var(--hl); animation: arte-pulso 1.4s ease-in-out infinite; }
+@keyframes arte-pulso { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+.arte-tile-pe { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.arte-tile-rot { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arte-tile-rot b { color: var(--text); font-weight: 600; }
+.arte-tile-acoes { display: flex; gap: 2px; opacity: .55; transition: opacity .2s var(--ease); }
+.arte-tile:hover .arte-tile-acoes, .arte-tile-acoes:focus-within { opacity: 1; }
+.arte-tile-acoes .arte-ib { width: 26px; height: 26px; }
+
+/* ---------- diálogos ---------- */
+.arte-dialog {
+  padding: 0; border: 1px solid var(--line); border-radius: calc(var(--rad) + 4px);
+  background: var(--panel); color: var(--text); box-shadow: 0 30px 70px -20px var(--shadow);
+  max-width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px);
+}
+.arte-dialog::backdrop { background: var(--bg); opacity: .78; }
+.arte-dialog header { display: flex; align-items: center; gap: 12px; }
+.arte-dialog header h2 { margin: 0; font-size: 24px; flex: 1; min-width: 0; }
+.arte-dialog footer { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+.arte-vis { display: none; }
+.arte-vis[open] { display: flex; width: min(1100px, calc(100vw - 32px)); }
+.arte-vis-img { flex: 1 1 60%; min-width: 0; background: var(--desk); display: flex; align-items: center; justify-content: center; position: relative; min-height: 320px; }
+.arte-vis-img img { display: block; max-width: 100%; max-height: calc(100vh - 40px); object-fit: contain; }
+.arte-vis-lado { flex: 0 0 340px; padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; overflow: auto; }
+.arte-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+.arte-dl dt { color: var(--muted); }
+.arte-dl dd { margin: 0; overflow-wrap: anywhere; }
+.arte-vis-prompt { display: flex; flex-direction: column; gap: 6px; }
+.arte-vis-prompt p { margin: 0 0 6px; font-family: var(--fb); font-size: 15px; line-height: 1.45; }
+.arte-vis-prompt p.muted { font-family: var(--fu); font-size: 12px; }
+.arte-vis footer { margin-top: auto; }
+
+.arte-editor { width: min(760px, calc(100vw - 32px)); }
+.arte-editor form { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.arte-editor-corpo { display: flex; gap: 20px; flex-wrap: wrap; }
+.arte-editor-previa { flex: 0 0 170px; display: flex; flex-direction: column; gap: 10px; }
+.arte-editor-previa .arte-previa { border-radius: var(--rad); border: 1px solid var(--line); }
+.arte-editor-campos { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.arte-ta { min-height: 0; padding: 10px 12px; resize: vertical; line-height: 1.45; font-size: 13.5px; }
+
+.arte-fs { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.arte-fs legend { font-size: 12px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.arte-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); align-self: flex-start; flex-wrap: wrap; }
+.arte-seg-op { position: relative; cursor: pointer; }
+.arte-seg-op input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.arte-seg-op span { display: inline-flex; align-items: center; min-height: 30px; padding: 0 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.arte-seg-op input:checked + span { background: var(--sel); color: var(--selink); }
+.arte-seg-op input:focus-visible + span { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* ---------- painel de Ajustes ---------- */
+.arte-ajustes { padding: 22px 24px; }
+.arte-ajustes form { display: flex; flex-direction: column; gap: 18px; }
+.arte-ajustes header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.arte-ajustes header h2 { margin: 0; font-size: 26px; }
+.arte-ajustes header .muted { font-size: 13px; }
+.arte-prov { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.arte-prov-op {
+  position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--rad); transition: border-color .2s var(--ease);
+}
+.arte-prov-op:hover { border-color: var(--muted); }
+.arte-prov-op:has(input:checked) { border-color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
+.arte-prov-op input { accent-color: var(--acc); margin-top: 2px; }
+.arte-prov-op > span { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.arte-prov-op .muted { font-size: 12px; }
+.arte-ajustes-grupo { display: flex; flex-direction: column; gap: 12px; }
+.arte-ajustes-num { grid-template-columns: repeat(3, minmax(0, 160px)); }
+.arte-ajustes .label { margin: 0; }
+.arte-wf { font-family: ui-monospace, monospace; font-size: 12px; }
+.arte-privacidade { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.arte-privacidade ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.arte-privacidade b { color: var(--text); font-weight: 600; }
+.arte-ok { margin: 0; font-size: 13px; color: var(--text); border-left: 2px solid var(--acc2); padding-left: 10px; }
+.arte-ajustes footer { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .arte { padding: 20px 16px 32px; }
+  .arte-head-nota { margin-left: 0; }
+  .arte-grade-capa { grid-template-columns: 1fr; }
+  .arte-vis[open] { flex-direction: column; }
+  .arte-vis-lado { flex-basis: auto; }
+  .arte-alvo-sel { margin-left: 0; max-width: 100%; }
+}

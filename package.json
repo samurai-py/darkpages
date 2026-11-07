@@ -12,7 +12,9 @@
     "fetch:typst": "node scripts/fetch-typst.mjs",
     "spike:pdf": "tsx scripts/spike-pdf.ts",
     "web": "electron-vite build && tsx src/server/index.ts",
-    "web:tailscale": "electron-vite build && FOLIO_HOST=$(tailscale ip -4 | head -1) tsx src/server/index.ts"
+    "web:tailscale": "electron-vite build && FOLIO_HOST=$(tailscale ip -4 | head -1) tsx src/server/index.ts",
+    "fetch:fonts": "node scripts/fetch-fonts.mjs",
+    "setup": "npm run fetch:typst && npm run fetch:fonts"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.1.0",

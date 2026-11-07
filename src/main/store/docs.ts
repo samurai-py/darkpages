@@ -126,6 +126,11 @@ export async function getAsset(dir: string, name: string): Promise<string | null
   }
 }
 
+/** Apaga um arquivo de <livro>/assets/ (ignora se não existir). */
+export async function deleteAsset(dir: string, name: string): Promise<void> {
+  await rm(assetPath(dir, name), { force: true })
+}
+
 export function assetFilePath(dir: string, name: string): string {
   return assetPath(dir, name)
 }

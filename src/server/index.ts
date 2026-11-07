@@ -9,7 +9,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { extname, join, resolve, sep } from 'node:path'
 import { recentsStore } from '../main/recents'
 import { dispatch } from '../main/api/registry'
@@ -21,6 +22,41 @@ const HOST = process.env['FOLIO_HOST'] ?? '127.0.0.1'
 const PORT = Number(process.env['FOLIO_PORT'] ?? 4747)
 const STATIC = join(ROOT, 'out', 'renderer')
 const MAX_BODY = 40 * 1024 * 1024
+
+/**
+ * Proteções do modo web (a API escreve arquivos e chama IA, então não pode
+ * ser chamada por outra página aberta no navegador):
+ * - Host: só aceita os nomes deste servidor (bloqueia DNS rebinding)
+ * - Origin: se presente, tem de ser o próprio servidor (bloqueia CSRF)
+ * - Content-Type application/json obrigatório na API (força preflight CORS, que nunca é aceito)
+ * - token aleatório por inicialização, entregue em cookie SameSite=Strict HttpOnly ao carregar a interface
+ */
+const TOKEN = randomBytes(32).toString('hex')
+const COOKIE = 'folio_token'
+const host = hostname().toLowerCase()
+const ALLOWED_HOSTS = new Set(
+  [
+    `${HOST}:${PORT}`,
+    `${host}:${PORT}`,
+    ...(process.env['FOLIO_ALLOWED_HOSTS'] ?? '').split(',').map((h) => h.trim()).filter(Boolean)
+  ].map((h) => h.toLowerCase())
+)
+
+function hostOk(raw: string | undefined): boolean {
+  if (!raw) return false
+  const h = raw.toLowerCase()
+  if (ALLOWED_HOSTS.has(h)) return true
+  // nome MagicDNS do Tailscale: <maquina>.<tailnet>.ts.net:porta
+  return h === `${host}.${h.split('.').slice(1).join('.')}` && /\.ts\.net:\d+$/.test(h) && h.endsWith(`:${PORT}`)
+}
+
+function tokenOk(req: IncomingMessage): boolean {
+  const m = (req.headers.cookie ?? '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([a-f0-9]{64})`))
+  if (!m?.[1]) return false
+  const a = Buffer.from(m[1])
+  const b = Buffer.from(TOKEN)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -76,7 +112,12 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function send(res: ServerResponse, status: number, body: string, type = 'application/json; charset=utf-8'): void {
-  res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+  const headers: Record<string, string> = { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
+  if (type.startsWith('text/html')) {
+    headers['set-cookie'] = `${COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict`
+    headers['x-frame-options'] = 'DENY'
+  }
+  res.writeHead(status, headers)
   res.end(body)
 }
 
@@ -113,8 +154,16 @@ const server = createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url ?? '/', 'http://folio')
     try {
+      if (!hostOk(req.headers.host)) return send(res, 421, '{"error":"host não reconhecido"}')
+      const origin = req.headers.origin
+      if (origin && !hostOk(origin.replace(/^https?:\/\//, ''))) return send(res, 403, '{"error":"origem não permitida"}')
+      const needsToken = url.pathname.startsWith('/api/') || url.pathname.startsWith('/files/')
+      if (needsToken && !tokenOk(req)) return send(res, 401, '{"error":"sessão inválida: recarregue a página"}')
       if (url.pathname.startsWith('/api/')) {
         if (req.method !== 'POST') return send(res, 405, '{"error":"use POST"}')
+        if (!(req.headers['content-type'] ?? '').startsWith('application/json')) {
+          return send(res, 415, '{"error":"content-type deve ser application/json"}')
+        }
         const args = JSON.parse((await readBody(req)) || '[]') as unknown
         if (!Array.isArray(args)) return send(res, 400, '{"error":"args deve ser lista"}')
         const result = await dispatch(ctx, url.pathname.slice(5), args)
@@ -126,7 +175,7 @@ const server = createServer((req, res) => {
       const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html'
       const full = resolve(STATIC, rel)
       if (!full.startsWith(STATIC + sep)) return send(res, 403, '{"error":"proibido"}')
-      if (await serveFile(res, full)) return
+      if (extname(full) !== '.html' && (await serveFile(res, full))) return
       return send(res, 200, await readFile(join(STATIC, 'index.html'), 'utf8'), MIME['.html'])
     } catch (e) {
       return send(res, 500, JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }))

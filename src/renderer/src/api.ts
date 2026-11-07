@@ -61,7 +61,8 @@ export const folio = {
   },
   assets: {
     put: (dir: string, name: string, dataUrl: string) => call<string>('assets.put', dir, name, dataUrl),
-    get: (dir: string, name: string) => call<string | null>('assets.get', dir, name)
+    get: (dir: string, name: string) => call<string | null>('assets.get', dir, name),
+    delete: (dir: string, name: string) => call<void>('assets.delete', dir, name)
   },
   settings: {
     get: <T = Record<string, unknown>>(section: string) => call<T>('settings.get', section),

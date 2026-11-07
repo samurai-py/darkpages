@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import type { Editor } from '@tiptap/react'
 import type { ScreenProps } from '../screen'
-import { folio } from '../api'
-import { countWords, type ChapterContent, type Project } from '../../../shared/types'
+import { call, folio } from '../api'
+import { countWords, type ChapterContent, type ChapterKind, type Project } from '../../../shared/types'
+import type { CenaMeta, Conflito, Ficha } from '../../../shared/models'
 import { useAutosave, type SaveState } from '../useAutosave'
-
-type Props = ScreenProps
+import { ChapterEditor } from '../features/manuscrito/ChapterEditor'
+import { ChapterList, rotuloLongo, type Metas } from '../features/manuscrito/ChapterList'
+import { Toolbar, mmss, type Visual } from '../features/manuscrito/Toolbar'
+import { Inspector } from '../features/manuscrito/Inspector'
+import { Exportar, Importar } from '../features/manuscrito/ImportExport'
+import { Ico } from '../features/manuscrito/icones'
+import { fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '../features/manuscrito/texto'
+import type { Furo } from '../features/manuscrito/extensions'
+import { SyncStatus } from '../features/sync/SyncStatus'
+import { SpotifyPlayer } from '../features/spotify/Player'
+import './manuscrito.css'
 
 interface Draft {
   file: string
@@ -12,174 +23,604 @@ interface Draft {
   body: string
 }
 
-function statusText(s: SaveState): { text: string; cls: string } {
-  switch (s.kind) {
-    case 'saving':
-      return { text: 'Salvando…', cls: 'busy' }
-    case 'dirty':
-      return { text: 'Alterações não salvas', cls: 'busy' }
-    case 'saved':
-      return { text: `Salvo às ${s.at.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, cls: '' }
-    case 'error':
-      return { text: `Erro ao salvar: ${s.message}`, cls: 'bad' }
-    default:
-      return { text: 'Tudo salvo', cls: '' }
+interface CenaDraft {
+  file: string
+  cena: CenaMeta
+}
+
+type Toast =
+  | { id: string; tipo: 'furo'; conflito: Conflito }
+  | { id: string; tipo: 'info' | 'erro'; titulo: string; texto: string }
+
+const VISUAL_KEY = 'folio.manuscrito.visual'
+const VISUAL_PADRAO: Visual & { repeticoes: boolean; focoMin: number } = { corpoPx: 19, linha: 1.7, repeticoes: true, focoMin: 25 }
+const METAS_PADRAO: Metas = { metaCapitulo: 3000, metaLivro: 80000 }
+
+function lerVisual(): typeof VISUAL_PADRAO {
+  try {
+    const raw = localStorage.getItem(VISUAL_KEY)
+    if (raw) return { ...VISUAL_PADRAO, ...(JSON.parse(raw) as Partial<typeof VISUAL_PADRAO>) }
+  } catch {
+    /* armazenamento indisponível: usa o padrão */
+  }
+  return VISUAL_PADRAO
+}
+
+function gravarVisual(v: typeof VISUAL_PADRAO): void {
+  try {
+    localStorage.setItem(VISUAL_KEY, JSON.stringify(v))
+  } catch {
+    /* ignora */
   }
 }
 
-function chapterLabel(project: Project, index: number): string {
-  const c = project.chapters[index]
-  if (!c) return ''
-  if (c.kind === 'prologo') return 'Pról.'
-  if (c.kind === 'epilogo') return 'Epíl.'
-  return String(project.chapters.slice(0, index + 1).filter((x) => x.kind === 'capitulo').length)
+function msg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }
 
-export function Manuscrito({ project, onProject }: Props): ReactElement {
-  const [current, setCurrent] = useState<string | null>(project.chapters[0]?.file ?? null)
+export function chaveConflito(c: Conflito): string {
+  return `${c.fichaId}|${c.campo}|${c.trecho}`
+}
+
+function estadoSalvo(a: SaveState, b: SaveState): { text: string; cls: string } {
+  const err = a.kind === 'error' ? a : b.kind === 'error' ? b : null
+  if (err) return { text: `Erro ao salvar: ${err.message}`, cls: 'bad' }
+  if (a.kind === 'saving' || b.kind === 'saving') return { text: 'Salvando…', cls: 'busy' }
+  if (a.kind === 'dirty' || b.kind === 'dirty') return { text: 'Alterações não salvas', cls: 'busy' }
+  const ts = [a, b].flatMap((s) => (s.kind === 'saved' ? [s.at] : []))
+  if (ts.length) {
+    const at = new Date(Math.max(...ts.map((d) => d.getTime())))
+    return { text: `Salvo às ${at.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, cls: '' }
+  }
+  return { text: 'Tudo salvo', cls: '' }
+}
+
+/** Toque curto ao fim da ampulheta (sem arquivo de áudio). */
+function tocarAviso(): void {
+  try {
+    const ctx = new AudioContext()
+    const notas = [660, 880]
+    notas.forEach((f, i) => {
+      const o = ctx.createOscillator()
+      const g = ctx.createGain()
+      o.frequency.value = f
+      o.type = 'sine'
+      const t = ctx.currentTime + i * 0.22
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5)
+      o.connect(g).connect(ctx.destination)
+      o.start(t)
+      o.stop(t + 0.55)
+    })
+    setTimeout(() => void ctx.close(), 1500)
+  } catch {
+    /* sem áudio */
+  }
+}
+
+export function Manuscrito({ project, onProject, go, params }: ScreenProps): ReactElement {
+  const dir = project.dir
+  const projectRef = useRef(project)
+  projectRef.current = project
+
+  const inicial = params.chapter && project.chapters.some((c) => c.file === params.chapter) ? params.chapter : (project.chapters[0]?.file ?? null)
+  const [current, setCurrent] = useState<string | null>(inicial)
   const [chapter, setChapter] = useState<ChapterContent | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const [newTitle, setNewTitle] = useState('')
+  const [carga, setCarga] = useState(0)
+  const [title, setTitle] = useState('')
+  const [cena, setCena] = useState<CenaMeta>({})
+  const [ignorados, setIgnorados] = useState<string[]>([])
+  const [texto, setTexto] = useState('')
+  const [textoLento, setTextoLento] = useState('')
+  const [editor, setEditor] = useState<Editor | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const [fichas, setFichas] = useState<Ficha[]>([])
+  const [metas, setMetas] = useState<Metas>(METAS_PADRAO)
+  const [visual, setVisualState] = useState(lerVisual)
+  const [busca, setBusca] = useState(false)
+  const [foco, setFoco] = useState(false)
+  const [fimAmpulheta, setFimAmpulheta] = useState<number | null>(null)
+  const [agora, setAgora] = useState(Date.now())
+  const palavrasInicioFoco = useRef(0)
+
+  const [conflitos, setConflitos] = useState<Conflito[]>([])
+  const [checando, setChecando] = useState(false)
+  const [erroCont, setErroCont] = useState<string | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [modal, setModal] = useState<'importar' | 'exportar' | null>(null)
+
+  const root = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef('')
+
+  const setVisual = (v: Partial<typeof VISUAL_PADRAO>): void => {
+    setVisualState((old) => {
+      const n = { ...old, ...v }
+      gravarVisual(n)
+      return n
+    })
+  }
+
+  const toast = useCallback((t: Toast): void => {
+    setToasts((v) => [...v.filter((x) => x.id !== t.id), t].slice(-4))
+  }, [])
+  const fecharToast = (id: string): void => setToasts((v) => v.filter((x) => x.id !== id))
+
+  // ------------------------------------------------------------ salvamento
 
   const persist = useCallback(
     async (d: Draft): Promise<void> => {
-      const r = await folio.saveChapter(project.dir, d.file, d.title, d.body)
-      onProject({
-        ...project,
-        chapters: project.chapters.map((c) => (c.file === d.file ? { ...c, title: d.title, words: r.words } : c))
-      })
+      const r = await folio.saveChapter(dir, d.file, d.title, d.body)
+      const p = projectRef.current
+      onProject({ ...p, chapters: p.chapters.map((c) => (c.file === d.file ? { ...c, title: d.title, words: r.words } : c)) })
     },
-    [project, onProject]
+    [dir, onProject]
   )
-  const { state, schedule, flush } = useAutosave<Draft>(persist, 1000)
+  const corpo = useAutosave<Draft>(persist, 1000)
+
+  const persistCena = useCallback(
+    async (d: CenaDraft): Promise<void> => {
+      await call<ChapterContent>('manuscrito.cena', dir, d.file, d.cena)
+    },
+    [dir]
+  )
+  const meta = useAutosave<CenaDraft>(persistCena, 1000)
+
+  const flushAll = useCallback(async (): Promise<void> => {
+    await Promise.all([corpo.flush(), meta.flush()])
+  }, [corpo, meta])
+
+  // ------------------------------------------------------------ carga
 
   useEffect(() => {
-    if (!current) return
+    if (!current) {
+      setChapter(null)
+      return
+    }
     let alive = true
     setError(null)
     folio
-      .readChapter(project.dir, current)
+      .readChapter(dir, current)
       .then((c) => {
         if (!alive) return
+        bodyRef.current = c.body
         setChapter(c)
-        setDraft({ file: c.file, title: c.title, body: c.body })
+        setTitle(c.title)
+        setCena(c.cena ?? {})
+        setIgnorados(c.ignorados ?? [])
+        setConflitos([])
+        setErroCont(null)
+        setToasts((v) => v.filter((t) => t.tipo !== 'furo'))
+        setCarga((n) => n + 1)
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => alive && setError(msg(e)))
     return () => {
       alive = false
     }
-    // project.dir muda só ao trocar de livro; não recarrega a cada salvamento
+  }, [current, dir])
+
+  useEffect(() => {
+    let alive = true
+    folio.docs
+      .list<Ficha>(dir, 'universo')
+      .then((l) => alive && setFichas(l.filter((f) => f && typeof f.nome === 'string')))
+      .catch(() => alive && setFichas([]))
+    folio.docs
+      .get<Metas>(dir, 'escrita', 'metas')
+      .then((m) => alive && m && setMetas({ ...METAS_PADRAO, ...m }))
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [dir])
+
+  // abrir capítulo pedido por outra tela (params.chapter)
+  useEffect(() => {
+    const alvo = params.chapter
+    if (alvo && alvo !== current && projectRef.current.chapters.some((c) => c.file === alvo)) void switchTo(alvo)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, project.dir])
+  }, [params.chapter])
+
+  // o capítulo atual pode sumir (excluído em outra janela)
+  useEffect(() => {
+    if (current && !project.chapters.some((c) => c.file === current)) setCurrent(project.chapters[0]?.file ?? null)
+  }, [project.chapters, current])
+
+  // texto "lento" para análises mais pesadas (fichas na cena)
+  useEffect(() => {
+    const t = setTimeout(() => setTextoLento(texto), 800)
+    return () => clearTimeout(t)
+  }, [texto])
 
   const switchTo = async (file: string): Promise<void> => {
-    await flush()
+    if (file === current) return
+    await flushAll()
+    setBusca(false)
     setCurrent(file)
   }
 
-  const edit = (patch: Partial<Draft>): void => {
-    if (!draft) return
-    const next = { ...draft, ...patch }
-    setDraft(next)
-    schedule(next)
+  const onEditor = useCallback((e: Editor | null): void => {
+    setEditor(e)
+    if (e) {
+      const t = e.getText()
+      setTexto(t)
+      setTextoLento(t)
+    }
+  }, [])
+
+  const onChange = (md: string, t: string): void => {
+    if (!current) return
+    bodyRef.current = md
+    setTexto(t)
+    corpo.schedule({ file: current, title: title.trim() || 'Sem título', body: md })
   }
 
-  const add = async (e: FormEvent): Promise<void> => {
-    e.preventDefault()
-    const t = newTitle.trim()
-    if (!t) return
-    await flush()
-    const p = await folio.addChapter(project.dir, t)
+  const onTitulo = (t: string): void => {
+    setTitle(t)
+    if (current) corpo.schedule({ file: current, title: t.trim() || 'Sem título', body: bodyRef.current })
+  }
+
+  const onCena = (c: CenaMeta): void => {
+    setCena(c)
+    if (current) meta.schedule({ file: current, cena: c })
+  }
+
+  // ------------------------------------------------------------ estrutura
+
+  const criar = async (t: string): Promise<void> => {
+    await flushAll()
+    const p = await folio.addChapter(dir, t)
     onProject(p)
-    setNewTitle('')
     setCurrent(p.chapters.at(-1)?.file ?? null)
   }
 
-  const total = project.chapters.reduce((s, c) => s + c.words, 0)
-  const words = draft ? countWords(draft.body) : 0
-  const st = statusText(state)
+  const renomear = async (file: string, t: string): Promise<void> => {
+    await flushAll()
+    onProject(await call<Project>('manuscrito.titulo', dir, file, t))
+    if (file === current) setTitle(t)
+  }
+
+  const mover = async (ordem: string[]): Promise<void> => {
+    await flushAll()
+    const r = await call<{ project: Project; renomeados: Record<string, string> }>('manuscrito.reordenar', dir, ordem)
+    onProject(r.project)
+    if (current && r.renomeados[current]) setCurrent(r.renomeados[current]!)
+  }
+
+  const mudarTipo = async (file: string, k: ChapterKind): Promise<void> => {
+    await flushAll()
+    onProject(await call<Project>('manuscrito.tipo', dir, file, k))
+  }
+
+  const excluir = async (file: string): Promise<void> => {
+    await flushAll()
+    const caps = projectRef.current.chapters
+    const i = caps.findIndex((c) => c.file === file)
+    const p = await call<Project>('manuscrito.excluir', dir, file)
+    onProject(p)
+    if (file === current) setCurrent(p.chapters[Math.min(i, p.chapters.length - 1)]?.file ?? null)
+    toast({ id: `del-${file}`, tipo: 'info', titulo: 'Capítulo excluído', texto: 'Ele foi para .arca/lixeira dentro da pasta do livro.' })
+  }
+
+  const salvarMetas = (m: Metas): void => {
+    setMetas(m)
+    folio.docs.put(dir, 'escrita', 'metas', m).catch((e: unknown) => toast({ id: 'metas', tipo: 'erro', titulo: 'Metas não salvas', texto: msg(e) }))
+  }
+
+  // ------------------------------------------------------------ continuidade
+
+  const checar = async (): Promise<void> => {
+    if (!current) return
+    setChecando(true)
+    setErroCont(null)
+    try {
+      await flushAll()
+      const lista = await call<Conflito[]>('ia.continuidade', dir, current)
+      const ign = new Set(ignorados)
+      const novos = (Array.isArray(lista) ? lista : []).filter((c) => !ign.has(chaveConflito(c)))
+      setConflitos(novos)
+      setToasts((v) => v.filter((t) => t.tipo !== 'furo'))
+      novos.slice(0, 2).forEach((c) => toast({ id: `furo-${chaveConflito(c)}`, tipo: 'furo', conflito: c }))
+      if (novos.length === 0) toast({ id: 'cont-ok', tipo: 'info', titulo: 'Continuidade', texto: 'Nenhum furo encontrado neste capítulo.' })
+    } catch (e) {
+      setErroCont(msg(e))
+    } finally {
+      setChecando(false)
+    }
+  }
+
+  const ignorar = async (c: Conflito): Promise<void> => {
+    if (!current) return
+    const k = chaveConflito(c)
+    setConflitos((v) => v.filter((x) => chaveConflito(x) !== k))
+    fecharToast(`furo-${k}`)
+    try {
+      await meta.flush()
+      setIgnorados(await call<string[]>('manuscrito.ignorar', dir, current, k))
+    } catch (e) {
+      toast({ id: 'ign', tipo: 'erro', titulo: 'Não deu para lembrar', texto: msg(e) })
+    }
+  }
+
+  const abrirFicha = async (id: string): Promise<void> => {
+    await flushAll()
+    go('universo', { ficha: id })
+  }
+
+  const furos: Furo[] = useMemo(
+    () => conflitos.map((c) => ({ trecho: c.trecho, titulo: `${c.fichaNome} · ${c.campo}: na ficha “${c.esperado}”, aqui “${c.encontrado}”` })),
+    [conflitos]
+  )
+
+  // ------------------------------------------------------------ foco e ampulheta
+
+  const sairFoco = useCallback((): void => {
+    setFoco(false)
+    setFimAmpulheta(null)
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+  }, [])
+
+  const entrarFoco = (): void => {
+    setFoco(true)
+    setBusca(false)
+    palavrasInicioFoco.current = countWords(texto)
+    setFimAmpulheta(Date.now() + visual.focoMin * 60_000)
+    setAgora(Date.now())
+    const el = root.current
+    if (el?.requestFullscreen) void el.requestFullscreen().catch(() => undefined)
+  }
+
+  useEffect(() => {
+    const onFs = (): void => {
+      if (!document.fullscreenElement && foco) sairFoco()
+    }
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [foco, sairFoco])
+
+  useEffect(() => {
+    if (fimAmpulheta === null) return
+    const id = setInterval(() => setAgora(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [fimAmpulheta])
+
+  const restante = fimAmpulheta === null ? null : Math.max(0, Math.round((fimAmpulheta - agora) / 1000))
+
+  useEffect(() => {
+    if (restante !== 0 || fimAmpulheta === null) return
+    setFimAmpulheta(null)
+    tocarAviso()
+    const escritas = Math.max(0, countWords(texto) - palavrasInicioFoco.current)
+    toast({
+      id: 'ampulheta',
+      tipo: 'info',
+      titulo: 'A ampulheta virou',
+      texto: `${visual.focoMin} minutos de escrita · ${fmt(escritas)} palavras novas. Respire e, se quiser, comece outra rodada.`
+    })
+  }, [restante, fimAmpulheta, texto, visual.focoMin, toast])
+
+  const alternarAmpulheta = (): void => {
+    if (fimAmpulheta === null) {
+      palavrasInicioFoco.current = countWords(texto)
+      setFimAmpulheta(Date.now() + visual.focoMin * 60_000)
+      setAgora(Date.now())
+    } else setFimAmpulheta(null)
+  }
+
+  // Ctrl+F abre a busca
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setBusca(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // ------------------------------------------------------------ números
+
+  const layout = project.meta.layout
+  const palavrasCap = countWords(texto)
+  const palavrasDe = (file: string, w: number): number => (file === current && editor ? palavrasCap : w)
+  const totalLivro = project.chapters.reduce((s, c) => s + palavrasDe(c.file, c.words), 0)
+  const paginasLivro = project.chapters.reduce((s, c) => s + paginasCapitulo(palavrasDe(c.file, c.words), layout), 0)
+  const paginasCap = paginasCapitulo(palavrasCap, layout)
+  const st = estadoSalvo(corpo.state, meta.state)
+  const presentes = useMemo(() => fichasNoTexto(`${title}\n${textoLento}`, fichas), [textoLento, title, fichas])
+  const rotulo = current ? rotuloLongo(project.chapters, current) : ''
 
   return (
-    <div className="screen">
-      <aside className="chapters" aria-label="Capítulos">
-        <header>
-          <span className="label">Capítulos · {project.chapters.length}</span>
-        </header>
-        <div className="chlist">
-          {project.chapters.map((c, i) => (
-            <button
-              key={c.file}
-              type="button"
-              className="ch"
-              aria-current={c.file === current}
-              onClick={() => void switchTo(c.file)}
-            >
-              <span className="n">{chapterLabel(project, i)}</span>
-              <span className="t">{c.title}</span>
-              <span className="w">{c.words.toLocaleString('pt-BR')}</span>
-            </button>
-          ))}
-        </div>
-        <form onSubmit={(e) => void add(e)}>
-          <footer>
-            <input
-              className="input"
-              aria-label="Título do novo capítulo"
-              placeholder="Novo capítulo"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-            />
-            <button type="submit" className="btn sm" disabled={!newTitle.trim()}>
-              Criar
-            </button>
-          </footer>
-        </form>
-      </aside>
+    <div ref={root} className={`screen ms${foco ? ' ms-foco' : ''}`}>
+      {!foco && (
+        <ChapterList
+          capitulos={project.chapters}
+          atual={current}
+          palavrasAtual={editor ? palavrasCap : (project.chapters.find((c) => c.file === current)?.words ?? 0)}
+          metas={metas}
+          onMetas={salvarMetas}
+          onAbrir={(f) => void switchTo(f)}
+          onCriar={criar}
+          onRenomear={renomear}
+          onMover={mover}
+          onTipo={mudarTipo}
+          onExcluir={excluir}
+          onImportar={() => setModal('importar')}
+          onExportar={() => setModal('exportar')}
+        />
+      )}
 
-      <main className="desk">
-        <div className="desk-scroll">
+      <main className="ms-desk">
+        {chapter && (
+          <Toolbar
+            editor={editor}
+            visual={visual}
+            onVisual={(v) => setVisual(v)}
+            repeticoes={visual.repeticoes}
+            onRepeticoes={(r) => setVisual({ repeticoes: r })}
+            buscaAberta={busca}
+            onBusca={setBusca}
+            foco={foco}
+            onFoco={(v) => (v ? entrarFoco() : sairFoco())}
+            focoMin={visual.focoMin}
+            onFocoMin={(m) => {
+              setVisual({ focoMin: m })
+              if (fimAmpulheta !== null) setFimAmpulheta(Date.now() + m * 60_000)
+            }}
+            restante={restante}
+            onAmpulheta={alternarAmpulheta}
+          />
+        )}
+
+        <div className="ms-scroll">
           {error && <p className="err">{error}</p>}
-          {draft && chapter ? (
-            <article className="page">
-              <input
-                className="ctitle"
-                aria-label="Título do capítulo"
-                value={draft.title}
-                onChange={(e) => edit({ title: e.target.value })}
-              />
-              <textarea
-                aria-label="Texto do capítulo"
-                spellCheck
-                lang="pt-BR"
-                value={draft.body}
-                onChange={(e) => edit({ body: e.target.value })}
-                placeholder="Comece a escrever…"
-              />
-            </article>
+          {chapter && current === chapter.file ? (
+            <ChapterEditor
+              key={`${chapter.file}#${carga}`}
+              inicial={chapter.body}
+              rotulo={rotulo}
+              titulo={title}
+              onTitulo={onTitulo}
+              onChange={onChange}
+              onEditor={onEditor}
+              repeticoes={visual.repeticoes}
+              furos={furos}
+              corpoPx={visual.corpoPx}
+              linha={visual.linha}
+            />
           ) : (
-            !error && (
+            !error &&
+            project.chapters.length === 0 && (
               <div className="empty">
                 <span className="disp">Nenhum capítulo</span>
-                Crie o primeiro na coluna da esquerda.
+                Crie o primeiro capítulo ou importe um manuscrito (.docx, .txt, .md).
+                <div className="ms-row">
+                  <button type="button" className="btn sm pri" onClick={() => void criar('Capítulo um')}>
+                    Criar primeiro capítulo
+                  </button>
+                  <button type="button" className="btn sm" onClick={() => setModal('importar')}>
+                    <Ico n="importar" size={15} /> Importar
+                  </button>
+                </div>
               </div>
             )
           )}
         </div>
-        <footer className="status">
+
+        <div className="ms-spotify">
+          <SpotifyPlayer />
+        </div>
+
+        <div className="ms-toasts" aria-live="polite">
+          {toasts.map((t) =>
+            t.tipo === 'furo' ? (
+              <div key={t.id} className="ms-toast furo" role="status">
+                <span className="ms-toast-i" aria-hidden="true">
+                  !
+                </span>
+                <div className="ms-toast-c">
+                  <strong>Furo de continuidade</strong>
+                  <span>
+                    Na ficha, {t.conflito.fichaNome} tem <b>{t.conflito.campo.toLowerCase()} {t.conflito.esperado}</b>. Aqui:{' '}
+                    <b className="ms-alerta">{t.conflito.encontrado}</b>.
+                  </span>
+                  <div className="ms-row ms-row-l">
+                    <button type="button" className="btn sm" onClick={() => void abrirFicha(t.conflito.fichaId)}>
+                      Abrir ficha
+                    </button>
+                    <button type="button" className="btn sm ms-quieto" onClick={() => void ignorar(t.conflito)}>
+                      Foi de propósito
+                    </button>
+                  </div>
+                </div>
+                <button type="button" className="ms-ib" aria-label="Fechar aviso" onClick={() => fecharToast(t.id)}>
+                  <Ico n="fechar" size={13} />
+                </button>
+              </div>
+            ) : (
+              <div key={t.id} className={`ms-toast ${t.tipo}`} role={t.tipo === 'erro' ? 'alert' : 'status'}>
+                <div className="ms-toast-c">
+                  <strong>{t.titulo}</strong>
+                  <span>{t.texto}</span>
+                </div>
+                <button type="button" className="ms-ib" aria-label="Fechar aviso" onClick={() => fecharToast(t.id)}>
+                  <Ico n="fechar" size={13} />
+                </button>
+              </div>
+            )
+          )}
+        </div>
+
+        <footer className="status ms-status">
           <span>
-            <b>{words.toLocaleString('pt-BR')}</b> palavras no capítulo
+            <b>{fmt(palavrasCap)}</b> palavras no capítulo
           </span>
           <span>
-            <b>{(total - (chapter ? project.chapters.find((c) => c.file === chapter.file)?.words ?? 0 : 0) + words).toLocaleString('pt-BR')}</b>{' '}
-            no livro
+            <b>{fmt(totalLivro)}</b> no livro
           </span>
+          <span title="Estimativa pelo formato, corpo e entrelinha da Diagramação">
+            ≈ {fmt(paginasCap)} p. · {fmt(paginasLivro)} páginas · {formatoCm(layout)}
+          </span>
+          <span>{tempoLeitura(palavrasCap)}</span>
+          {foco && restante !== null && (
+            <span>
+              <Ico n="ampulheta" size={12} /> {mmss(restante)}
+            </span>
+          )}
           <span className="saved" role="status">
             <i className={`dot ${st.cls}`} />
             {st.text}
           </span>
+          <SyncStatus dir={dir} />
         </footer>
       </main>
+
+      {!foco && current && chapter && (
+        <Inspector
+          dir={dir}
+          file={current}
+          rotulo={rotulo}
+          cena={cena}
+          onCena={onCena}
+          fichas={fichas}
+          onFicha={(f) => setFichas((v) => v.map((x) => (x.id === f.id ? f : x)))}
+          presentes={presentes}
+          conflitos={conflitos}
+          checando={checando}
+          erroContinuidade={erroCont}
+          onChecar={() => void checar()}
+          onAbrirFicha={(id) => void abrirFicha(id)}
+          onIgnorar={(c) => void ignorar(c)}
+          antesDaIA={flushAll}
+        />
+      )}
+
+      {modal === 'importar' && (
+        <Importar
+          dir={dir}
+          onClose={() => setModal(null)}
+          onFeito={(p, criados) => {
+            void flushAll().then(() => {
+              onProject(p)
+              setModal(null)
+              if (criados[0]) setCurrent(criados[0])
+              toast({ id: 'imp', tipo: 'info', titulo: 'Importação concluída', texto: `${criados.length} ${criados.length === 1 ? 'capítulo entrou' : 'capítulos entraram'} no fim do livro.` })
+            })
+          }}
+        />
+      )}
+      {modal === 'exportar' && (
+        <Exportar
+          dir={dir}
+          onClose={() => setModal(null)}
+          onFeito={(path) => {
+            setModal(null)
+            toast({ id: 'exp', tipo: 'info', titulo: 'Exportado', texto: path.split(/[\\/]/).pop() ?? path })
+          }}
+        />
+      )}
     </div>
   )
 }

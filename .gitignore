@@ -6,3 +6,5 @@ resources/bin/
 .DS_Store
 # projetos de teste gerados pelo spike
 spike-output/
+# fontes baixadas por npm run fetch:fonts
+resources/fonts/*/

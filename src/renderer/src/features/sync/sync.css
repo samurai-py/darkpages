@@ -1,0 +1,61 @@
+/* Sync: indicador do Drive e painel de Ajustes. Só tokens do tema. */
+
+.sy { position: relative; display: inline-flex; }
+.sy-btn {
+  font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 0 8px;
+  border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer;
+  transition: background-color .25s var(--ease), border-color .25s var(--ease), color .2s;
+}
+.sy-btn:hover, .sy-btn[aria-expanded='true'] { background: var(--chipbg); border-color: var(--line); color: var(--text); }
+.sy-emdia { color: var(--muted); }
+.sy-enviando { color: var(--acc); }
+.sy-enviando svg { animation: syPulse 1.6s var(--ease) infinite; }
+.sy-conflito, .sy-erro { color: var(--alert); }
+.sy-offline, .sy-desconectado, .sy-carregando { color: var(--muted); }
+@keyframes syPulse { 50% { opacity: .45; } }
+.sy-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.sy-pop {
+  position: absolute; right: 0; bottom: calc(100% + 10px); width: 340px; max-width: calc(100vw - 32px); z-index: 30;
+  padding: 16px; display: flex; flex-direction: column; gap: 12px; color: var(--text); font-size: 13px;
+  box-shadow: 0 24px 50px -18px var(--shadow); animation: fadeUp .3s var(--ease) both;
+}
+.sy-head { display: flex; gap: 12px; align-items: center; }
+.sy-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sy-head .muted { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-ico { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--chipbg); }
+.sy-p { margin: 0; line-height: 1.5; font-size: 12.5px; color: var(--muted); }
+.sy-p b { color: var(--text); font-weight: 600; }
+.sy-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.sy-dl dt { color: var(--muted); }
+.sy-dl dd { margin: 0; text-align: right; }
+.sy-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sy-conf ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sy-conf li { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: calc(var(--rad) - 4px); }
+.sy-conf code { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--alert); }
+.sy-conf .muted { font-size: 11.5px; }
+
+/* ---------- painel de Ajustes ---------- */
+.sy-set { display: flex; flex-direction: column; gap: 22px; }
+.sy-card { padding: 22px 24px; display: flex; flex-direction: column; gap: 16px; }
+.sy-card > header { display: flex; align-items: center; gap: 12px; }
+.sy-card > header h2 { margin: 0; font-size: 26px; }
+.sy-card > header .pill { margin-left: auto; }
+.sy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.sy-sub { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sy-hint { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.sy-hint code, .sy-steps code { font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--chipbg); color: var(--text); word-break: break-all; }
+.sy-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.5; color: var(--text); }
+.sy-steps li::marker { color: var(--acc); font-variant-numeric: tabular-nums; }
+.sy-details { border-top: 1px solid var(--line); padding-top: 12px; }
+.sy-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text); padding: 4px 0; }
+.sy-details summary:hover { color: var(--acc); }
+.sy-details[open] summary { margin-bottom: 10px; }
+.sy-device {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 16px 18px;
+  border: 1px dashed var(--acc); border-radius: var(--rad);
+}
+.sy-code { font-family: var(--fu); font-size: 30px; font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; user-select: all; }
+.sy-ok { display: inline-flex; align-items: center; gap: 7px; }
+.sy-ok::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--acc2); }
+.sy-link { color: var(--acc); font-weight: 600; text-underline-offset: 3px; word-break: break-all; }
