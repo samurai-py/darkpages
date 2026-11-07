@@ -5,7 +5,7 @@ import { Retrato } from '../universo/Retrato'
 import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { CARTAO_ROTULO, doCapitulo, rotuloCapitulo } from './board'
-import { Selo } from './Selo'
+import { FioSelo, Selo } from './Selo'
 
 export interface MuralProps {
   board: EnredoBoard
@@ -17,6 +17,8 @@ export interface MuralProps {
   onMover: (id: string, capitulo: string, antesDe: string | null) => void
   onCriarCena: (capitulo: string) => void
   onAbrirCapitulo: (file: string) => void
+  /** sinopse da cena de cada capítulo (arquivo → texto) */
+  sinopses?: Record<string, string>
 }
 
 /** E5: mural com uma coluna por capítulo e todos os cartões dele. */
@@ -49,6 +51,11 @@ export function Mural(props: MuralProps): ReactElement {
               {col.rot} · {col.cartoes.length}
             </span>
             <h2 className="disp">{col.titulo}</h2>
+            {col.cap && props.sinopses?.[col.cap] && (
+              <p className="en-sinopse" title={props.sinopses[col.cap]}>
+                {props.sinopses[col.cap]}
+              </p>
+            )}
             <div className="en-row">
               {col.cap && (
                 <button type="button" className="en-ico" aria-label={`Abrir ${col.titulo} no manuscrito`} onClick={() => props.onAbrirCapitulo(col.cap)}>
@@ -76,6 +83,7 @@ export function Mural(props: MuralProps): ReactElement {
                       <Mini name={c.tipo} size={13} /> {CARTAO_ROTULO[c.tipo].um}
                     </span>
                     <Selo c={c} />
+                    <FioSelo c={c} chapters={chapters} />
                     {c.tipo === 'personagem' && f0 ? (
                       <span className="en-mperson">
                         <span className="en-mface">

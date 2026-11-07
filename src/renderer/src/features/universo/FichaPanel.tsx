@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactElement } from 'react'
 import type { Ficha, FichaCampo, FichaRelacao, FichaTipo } from '../../../../shared/models'
+import type { ChapterInfo } from '../../../../shared/types'
+import { camposLegados, converterLegado, ultimoEscrito } from '../../../../shared/narrativa'
+import { rotuloPorId } from '../enredo/board'
 import { AparicoesFaixa } from './Aparicoes'
 import { TIPOS, TIPO_ROTULO, porNome, trocarTipo } from './fichas'
 import { Mini } from './icons'
@@ -11,6 +14,8 @@ export interface FichaPanelProps {
   todas: Ficha[]
   grupos: string[]
   retratoUrl: string | null | undefined
+  /** capítulos do livro (para "mudou a partir de…") */
+  chapters: ChapterInfo[]
   /** há alterações ainda não gravadas desta ficha */
   pendente: boolean
   status: string
@@ -48,6 +53,17 @@ export function FichaPanel(props: FichaPanelProps): ReactElement {
   const set = (patch: Partial<Ficha>): void => onChange({ ...f, ...patch })
   const setCampo = (i: number, patch: Partial<FichaCampo>): void =>
     set({ campos: f.campos.map((c, j) => (j === i ? { ...c, ...patch } : c)) })
+  const setMudanca = (i: number, j: number, patch: Partial<{ valor: string; desde: string }>): void =>
+    setCampo(i, { historico: (f.campos[i]?.historico ?? []).map((h, k) => (k === j ? { ...h, ...patch } : h)) })
+  const addMudanca = (i: number): void => {
+    const cap = props.chapters[Math.max(0, ultimoEscrito(props.chapters))]
+    if (cap) setCampo(i, { historico: [...(f.campos[i]?.historico ?? []), { valor: '', desde: cap.id }] })
+  }
+  const tirarMudanca = (i: number, j: number): void => {
+    const resto = (f.campos[i]?.historico ?? []).filter((_, k) => k !== j)
+    set({ campos: f.campos.map((c, k) => (k !== i ? c : resto.length ? { ...c, historico: resto } : { nome: c.nome, valor: c.valor })) })
+  }
+  const legados = camposLegados(f, props.chapters)
   const setRelacao = (i: number, patch: Partial<FichaRelacao>): void =>
     set({ relacoes: f.relacoes.map((r, j) => (j === i ? { ...r, ...patch } : r)) })
 
@@ -202,30 +218,81 @@ export function FichaPanel(props: FichaPanelProps): ReactElement {
 
         <section className="uv-sec">
           <h3 className="uv-eb">Atributos</h3>
+          {legados.length > 0 && (
+            <div className="uv-legado" role="note">
+              <span>
+                {legados.length === 1 ? 'Um atributo usa' : `${legados.length} atributos usam`} a forma antiga com <b>@cap</b> (ex.: “morto@cap12”). Converta para
+                “mudou a partir de…”: fica preso ao capítulo, mesmo se a ordem mudar.
+              </span>
+              <button type="button" className="btn sm pri" onClick={() => onChange(converterLegado(f, props.chapters).ficha)}>
+                <Mini name="historico" /> Converter
+              </button>
+            </div>
+          )}
           <div className="uv-campos">
             {f.campos.map((c, i) => (
-              <div className="uv-campo" key={i}>
-                <input
-                  className="uv-cnome"
-                  value={c.nome}
-                  aria-label={`Nome do atributo ${i + 1}`}
-                  onChange={(e) => setCampo(i, { nome: e.target.value })}
-                />
-                <input
-                  className="input uv-cval"
-                  value={c.valor}
-                  aria-label={c.nome || `Valor do atributo ${i + 1}`}
-                  placeholder="—"
-                  onChange={(e) => setCampo(i, { valor: e.target.value })}
-                />
-                <button
-                  type="button"
-                  className="uv-ico"
-                  aria-label={`Remover atributo ${c.nome || i + 1}`}
-                  onClick={() => set({ campos: f.campos.filter((_, j) => j !== i) })}
-                >
-                  <Mini name="lixo" />
-                </button>
+              <div className="uv-cgrupo" key={i}>
+                <div className="uv-campo">
+                  <input
+                    className="uv-cnome"
+                    value={c.nome}
+                    aria-label={`Nome do atributo ${i + 1}`}
+                    onChange={(e) => setCampo(i, { nome: e.target.value })}
+                  />
+                  <input
+                    className="input uv-cval"
+                    value={c.valor}
+                    aria-label={c.historico?.length ? `${c.nome || `Atributo ${i + 1}`} no início do livro` : c.nome || `Valor do atributo ${i + 1}`}
+                    placeholder={c.historico?.length ? 'no início do livro' : '—'}
+                    onChange={(e) => setCampo(i, { valor: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="uv-ico"
+                    aria-label={`${c.nome || 'Atributo'}: mudou a partir de um capítulo…`}
+                    title="Mudou a partir de um capítulo…"
+                    disabled={!props.chapters.length}
+                    onClick={() => addMudanca(i)}
+                  >
+                    <Mini name="historico" />
+                  </button>
+                  <button
+                    type="button"
+                    className="uv-ico"
+                    aria-label={`Remover atributo ${c.nome || i + 1}`}
+                    onClick={() => set({ campos: f.campos.filter((_, j) => j !== i) })}
+                  >
+                    <Mini name="lixo" />
+                  </button>
+                </div>
+                {(c.historico ?? []).map((h, j) => (
+                  <div className="uv-mud" key={j}>
+                    <span className="label">a partir de</span>
+                    <select
+                      className="select"
+                      value={h.desde}
+                      aria-label={`${c.nome}: capítulo da mudança ${j + 1}`}
+                      onChange={(e) => setMudanca(i, j, { desde: e.target.value })}
+                    >
+                      {!props.chapters.some((ch) => ch.id === h.desde) && <option value={h.desde}>(capítulo removido)</option>}
+                      {props.chapters.map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          {rotuloPorId(props.chapters, ch.id)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input uv-cval"
+                      value={h.valor}
+                      placeholder="novo valor"
+                      aria-label={`${c.nome}: valor a partir de ${rotuloPorId(props.chapters, h.desde, false)}`}
+                      onChange={(e) => setMudanca(i, j, { valor: e.target.value })}
+                    />
+                    <button type="button" className="uv-ico" aria-label={`Remover mudança ${j + 1} de ${c.nome}`} onClick={() => tirarMudanca(i, j)}>
+                      <Mini name="fechar" />
+                    </button>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

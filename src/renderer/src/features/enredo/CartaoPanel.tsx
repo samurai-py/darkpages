@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import type { Cartao, CartaoTipo, EnredoBoard, Ficha, Ligacao } from '../../../../shared/models'
 import type { ChapterInfo } from '../../../../shared/types'
+import { estadoFio } from '../../../../shared/narrativa'
 import { TIPO_ROTULO, porNome } from '../universo/fichas'
 import { Mini } from '../universo/icons'
-import { CARTAO_ROTULO, CARTAO_TIPOS, LIGACAO_ROTULO, rotuloCapitulo } from './board'
+import { CARTAO_ROTULO, CARTAO_TIPOS, LIGACAO_ROTULO, rotuloCapitulo, rotuloPorId } from './board'
 import { ESTADO_ROTULO } from './Selo'
 
 const EXPLICA_ESTADO: Record<Cartao['estado'], string> = {
@@ -179,6 +180,10 @@ function PainelCartao(props: CartaoPanelProps & { c: Cartao }): ReactElement {
         />
       </label>
 
+      {c.tipo === 'fato' && <SecaoFato c={c} fichas={ordenadas} chapters={chapters} set={set} />}
+
+      <SecaoFio c={c} chapters={chapters} set={set} />
+
       <section className="en-sec">
         <h3 className="en-eb" id={`${uid}-f`}>
           Fichas ligadas
@@ -282,6 +287,201 @@ function PainelCartao(props: CartaoPanelProps & { c: Cartao }): ReactElement {
         )}
       </div>
     </aside>
+  )
+}
+
+/** Seletor de capítulo pelo id estável (os rótulos seguem o nome dos capítulos do livro). */
+function CapituloPorId({
+  chapters,
+  valor,
+  vazio,
+  rotulo,
+  onChange
+}: {
+  chapters: ChapterInfo[]
+  valor: string | undefined
+  vazio: string
+  rotulo: string
+  onChange: (id: string | undefined) => void
+}): ReactElement {
+  return (
+    <select className="select" aria-label={rotulo} value={valor ?? ''} onChange={(e) => onChange(e.target.value || undefined)}>
+      <option value="">{vazio}</option>
+      {valor && !chapters.some((ch) => ch.id === valor) && <option value={valor}>(capítulo removido)</option>}
+      {chapters.map((ch) => (
+        <option key={ch.id} value={ch.id}>
+          {rotuloPorId(chapters, ch.id)}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Cartão "fato": de quem é a afirmação, quando o leitor pode saber e as palavras que o entregam. */
+function SecaoFato({
+  c,
+  fichas,
+  chapters,
+  set
+}: {
+  c: Cartao
+  fichas: Ficha[]
+  chapters: ChapterInfo[]
+  set: (patch: Partial<Cartao>) => void
+}): ReactElement {
+  const uid = useId()
+  const [termo, setTermo] = useState('')
+  const termos = c.termos ?? []
+  const crenca = c.perspectiva?.tipo === 'crenca' ? c.perspectiva : null
+  const personagens = fichas.filter((f) => f.tipo === 'personagem' || f.tipo === 'divindade' || f.tipo === 'grupo')
+
+  useEffect(() => setTermo(''), [c.id])
+
+  const addTermo = (): void => {
+    const t = termo.trim()
+    if (t && !termos.some((x) => x.toLowerCase() === t.toLowerCase())) set({ termos: [...termos, t] })
+    setTermo('')
+  }
+  const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTermo()
+    } else if (e.key === 'Backspace' && !termo && termos.length) set({ termos: termos.slice(0, -1) })
+  }
+
+  return (
+    <section className="en-sec en-fato" aria-labelledby={`${uid}-t`}>
+      <h3 className="en-eb" id={`${uid}-t`}>
+        <Mini name="fato" size={14} /> Fato
+      </h3>
+      <fieldset className="en-fs">
+        <legend className="en-sr">De quem é</legend>
+        <label className="check">
+          <input type="radio" name={`${uid}-p`} checked={!crenca} onChange={() => set({ perspectiva: { tipo: 'verdade' } })} />
+          Verdade do livro
+        </label>
+        <label className="check">
+          <input
+            type="radio"
+            name={`${uid}-p`}
+            checked={!!crenca}
+            disabled={!personagens.length}
+            onChange={() => {
+              const f = personagens[0]
+              if (f) set({ perspectiva: { tipo: 'crenca', fichaId: f.id } })
+            }}
+          />
+          Crença ou afirmação de um personagem
+        </label>
+        {crenca && (
+          <select
+            className="select"
+            aria-label="Quem acredita ou afirma"
+            value={crenca.fichaId}
+            onChange={(e) => set({ perspectiva: { tipo: 'crenca', fichaId: e.target.value } })}
+          >
+            {!fichas.some((f) => f.id === crenca.fichaId) && <option value={crenca.fichaId}>(ficha ausente)</option>}
+            {personagens.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
+              </option>
+            ))}
+          </select>
+        )}
+        <p className="en-estado-txt">
+          {crenca
+            ? 'A IA recebe “fulano acredita/afirma…”, não como verdade: deixa de corrigir o texto quando ele narra essa crença.'
+            : 'A IA trata como fato do livro a partir do capítulo de revelação; antes dele, como segredo que não pode vazar.'}
+        </p>
+      </fieldset>
+      <label className="field">
+        O leitor pode saber a partir de
+        <CapituloPorId chapters={chapters} valor={c.revelarEm} vazio="Desde o início do livro" rotulo="Capítulo da revelação" onChange={(id) => set({ revelarEm: id })} />
+      </label>
+      <div className="field">
+        <span id={`${uid}-w`}>Palavras que entregam o fato</span>
+        <div className="en-chips" role="group" aria-labelledby={`${uid}-w`}>
+          {termos.map((t) => (
+            <span key={t} className="pill en-pchip">
+              <b>{t}</b>
+              <button type="button" className="en-px" aria-label={`Remover ${t}`} onClick={() => set({ termos: termos.filter((x) => x !== t) })}>
+                <Mini name="fechar" size={12} />
+              </button>
+            </span>
+          ))}
+          <input
+            className="en-chipin"
+            value={termo}
+            placeholder={termos.length ? 'mais uma…' : 'nome, apelido, palavra'}
+            aria-label="Nova palavra que entrega o fato (Enter para adicionar)"
+            onChange={(e) => setTermo(e.target.value)}
+            onKeyDown={onKey}
+            onBlur={addTermo}
+          />
+        </div>
+        <p className="en-estado-txt">
+          {c.revelarEm
+            ? 'O app avisa (Revisor, continuidade e insights) quando alguma aparece antes do capítulo da revelação. Ignora acento e maiúsculas.'
+            : 'Escolha o capítulo da revelação para o app vigiar estas palavras.'}
+        </p>
+      </div>
+    </section>
+  )
+}
+
+const FIO_ROTULO = { aberto: 'Aberto', resolvido: 'Resolvido', atrasado: 'Atrasado' } as const
+
+/** Fio solto: qualquer cartão pode ser uma promessa ou pergunta ao leitor. */
+function SecaoFio({ c, chapters, set }: { c: Cartao; chapters: ChapterInfo[]; set: (patch: Partial<Cartao>) => void }): ReactElement {
+  const uid = useId()
+  const est = estadoFio(c, chapters)
+  return (
+    <section className={`en-sec en-fio${est ? ` f-${est}` : ''}`} aria-labelledby={`${uid}-f`}>
+      <label className="check" id={`${uid}-f`}>
+        <input
+          type="checkbox"
+          checked={!!c.fio}
+          onChange={(e) => {
+            if (e.target.checked) set({ fio: { status: 'aberto' } })
+            else {
+              const { fio: _f, ...resto } = c
+              set({ ...resto, fio: undefined })
+            }
+          }}
+        />
+        <Mini name="fio" size={15} /> Fio solto (promessa ou pergunta ao leitor)
+      </label>
+      {c.fio && (
+        <>
+          <div className="en-grid2">
+            <label className="field">
+              Situação
+              <select className="select" value={c.fio.status} onChange={(e) => set({ fio: { ...c.fio, status: e.target.value === 'resolvido' ? 'resolvido' : 'aberto' } })}>
+                <option value="aberto">Aberto</option>
+                <option value="resolvido">Resolvido</option>
+              </select>
+            </label>
+            <label className="field">
+              Resolve em
+              <CapituloPorId
+                chapters={chapters}
+                valor={c.fio.resolveEm}
+                vazio="Ainda não sei"
+                rotulo="Capítulo onde o fio se resolve"
+                onChange={(id) => set({ fio: { status: c.fio?.status ?? 'aberto', ...(id ? { resolveEm: id } : {}) } })}
+              />
+            </label>
+          </div>
+          <p className="en-estado-txt">
+            {est === 'atrasado'
+              ? `${FIO_ROTULO.atrasado}: o livro já passou de ${rotuloPorId(chapters, c.fio.resolveEm, false)} e o fio continua aberto.`
+              : c.capitulo
+                ? `Plantado em ${rotuloCapitulo(chapters, c.capitulo)}.`
+                : 'Ligue o cartão a um capítulo para marcar onde o fio foi plantado.'}
+          </p>
+        </>
+      )}
+    </section>
   )
 }
 

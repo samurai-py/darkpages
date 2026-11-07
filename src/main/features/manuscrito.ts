@@ -183,6 +183,20 @@ export const handlers: Handlers = {
     return updateChapterMeta(d, file(f), { cena: cenaMeta(meta) })
   },
 
+  /**
+   * Sinopse de cena de todos os capítulos (front-matter "cena.sinopse"), para
+   * o Mural e o Roteiro. → { [arquivo]: sinopse } (só os que têm sinopse)
+   */
+  'manuscrito.sinopses': async (ctx, dir): Promise<Record<string, string>> => {
+    const d = await bookDir(ctx, dir)
+    const out: Record<string, string> = {}
+    for (const c of (await openProject(d)).chapters) {
+      const s = (await readChapter(d, c.file)).cena?.sinopse?.trim()
+      if (s) out[c.file] = s
+    }
+    return out
+  },
+
   /** "Foi de propósito": lembra a chave do conflito no front-matter. → string[] */
   'manuscrito.ignorar': async (ctx, dir, f, chave) => {
     const d = await bookDir(ctx, dir)

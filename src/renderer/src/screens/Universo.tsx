@@ -345,6 +345,7 @@ export function Universo({ project, go, params }: ScreenProps): ReactElement {
           todas={lista}
           grupos={nomesGrupos}
           retratoUrl={retratos[aberta.id]}
+          chapters={project.chapters}
           pendente={pendentes.has(aberta.id)}
           status={pendentes.has(aberta.id) ? 'Alterações pendentes…' : status}
           focarNome={recemCriada === aberta.id}

@@ -11,6 +11,7 @@ import { Roteiro } from '../features/enredo/Roteiro'
 import { Mural } from '../features/enredo/Mural'
 import { CartaoPanel } from '../features/enredo/CartaoPanel'
 import { Memoria } from '../features/enredo/Memoria'
+import { Leitor } from '../features/enredo/Leitor'
 import { FILTROS_ESTADO, passaFiltro, type FiltroEstado } from '../features/enredo/Selo'
 import './enredo.css'
 
@@ -19,14 +20,17 @@ import './enredo.css'
  * da IA (o que ela lembra de cada um), ao lado do roteiro e do mural, que são
  * a mesma história do ponto de vista do plano do autor.
  */
-type Visao = 'quadro' | 'roteiro' | 'mural' | 'memoria'
+type Visao = 'quadro' | 'roteiro' | 'mural' | 'leitor' | 'memoria'
 
 const VISOES: Array<{ id: Visao; nome: string }> = [
   { id: 'quadro', nome: 'Quadro' },
   { id: 'roteiro', nome: 'Roteiro' },
   { id: 'mural', nome: 'Mural' },
+  { id: 'leitor', nome: 'Leitor' },
   { id: 'memoria', nome: 'Memória' }
 ]
+
+const ICONE_VISAO = { quadro: 'ligar', roteiro: 'cena', mural: 'capitulo', leitor: 'leitor', memoria: 'memoria' } as const
 
 const ESPERA_SALVAR = 700
 
@@ -36,7 +40,8 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
   const [board, setBoard] = useState<EnredoBoard | null>(null)
   const [fichas, setFichas] = useState<Ficha[]>([])
   const [erro, setErro] = useState('')
-  const [visao, setVisao] = useState<Visao>(() => (params['visao'] === 'memoria' ? 'memoria' : 'quadro'))
+  const [visao, setVisao] = useState<Visao>(() => (VISOES.some((v) => v.id === params['visao']) ? (params['visao'] as Visao) : 'quadro'))
+  const [sinopses, setSinopses] = useState<Record<string, string>>({})
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('vivos')
   const [sel, setSel] = useState<Selecao>(null)
   const [focar, setFocar] = useState<string | null>(null)
@@ -63,6 +68,17 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
       vivo = false
     }
   }, [dir])
+
+  // sinopse de cada capítulo (cabeçalhos do Mural e do Roteiro)
+  useEffect(() => {
+    let vivo = true
+    call<Record<string, string>>('manuscrito.sinopses', dir)
+      .then((s) => vivo && setSinopses(s ?? {}))
+      .catch(() => undefined)
+    return () => {
+      vivo = false
+    }
+  }, [dir, chapters])
 
   // ---------- autosave (debounce, uma gravação por vez) ----------
   const ultimo = useRef<EnredoBoard | null>(null)
@@ -229,7 +245,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
               className="en-tab"
               onClick={() => setVisao(v.id)}
             >
-              <Mini name={v.id === 'quadro' ? 'ligar' : v.id === 'roteiro' ? 'cena' : v.id === 'memoria' ? 'memoria' : 'capitulo'} />
+              <Mini name={ICONE_VISAO[v.id]} />
               {v.nome}
             </button>
           ))}
@@ -240,7 +256,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
         <span className="pill">
           <b>{b.ligacoes.length}</b> {b.ligacoes.length === 1 ? 'ligação' : 'ligações'}
         </span>
-        {visao !== 'memoria' && (
+        {visao !== 'memoria' && visao !== 'leitor' && (
           <label className="en-festado">
             <Mini name="provisorio" size={14} />
             <span className="en-sr">Mostrar cartões</span>
@@ -254,7 +270,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
             </select>
           </label>
         )}
-        {visao !== 'memoria' && nProvisorios > 0 && filtroEstado !== 'provisorios' && (
+        {visao !== 'memoria' && visao !== 'leitor' && nProvisorios > 0 && filtroEstado !== 'provisorios' && (
           <button type="button" className="pill en-pprov" onClick={() => setFiltroEstado('provisorios')}>
             <b>{nProvisorios}</b> {nProvisorios === 1 ? 'ideia provisória da IA' : 'ideias provisórias'}
           </button>
@@ -296,7 +312,11 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
               onMover={moverRoteiro}
               onCriarCena={criarCena}
               onAbrirCapitulo={abrirCapitulo}
+              sinopses={sinopses}
             />
+          )}
+          {board && visao === 'leitor' && (
+            <Leitor board={b} chapters={chapters} fichas={fichasMap} selId={selId} onSel={(id) => selecionarCartao(id)} onAbrirCapitulo={abrirCapitulo} />
           )}
           {board && visao === 'mural' && (
             <Mural
@@ -309,6 +329,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
               onMover={moverRoteiro}
               onCriarCena={criarCena}
               onAbrirCapitulo={abrirCapitulo}
+              sinopses={sinopses}
             />
           )}
         </div>

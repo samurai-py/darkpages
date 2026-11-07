@@ -1,14 +1,15 @@
 import type { Cartao, CartaoTipo, EnredoBoard, Ligacao } from '../../../../shared/models'
 import type { ChapterInfo } from '../../../../shared/types'
 
-export const CARTAO_TIPOS: CartaoTipo[] = ['cena', 'virada', 'personagem', 'ideia', 'local']
+export const CARTAO_TIPOS: CartaoTipo[] = ['cena', 'virada', 'personagem', 'ideia', 'local', 'fato']
 
 export const CARTAO_ROTULO: Record<CartaoTipo, { um: string; varios: string; novo: string }> = {
   cena: { um: 'Cena', varios: 'Cenas', novo: 'Nova cena' },
   virada: { um: 'Virada', varios: 'Viradas', novo: 'Nova virada' },
   personagem: { um: 'Personagem', varios: 'Personagens', novo: 'Personagem' },
   ideia: { um: 'Ideia', varios: 'Ideias', novo: 'Nova ideia' },
-  local: { um: 'Local', varios: 'Locais', novo: 'Novo local' }
+  local: { um: 'Local', varios: 'Locais', novo: 'Novo local' },
+  fato: { um: 'Fato', varios: 'Fatos', novo: 'Novo fato' }
 }
 
 export const LIGACAO_ROTULO: Record<Ligacao['tipo'], string> = {
@@ -52,6 +53,15 @@ export function rotuloCapitulo(chapters: ChapterInfo[], file: string | undefined
     }
   }
   return 'capítulo removido'
+}
+
+/** Rótulo do capítulo pelo id estável ("cap. 3 — Título"); '' sem id. */
+export function rotuloPorId(chapters: ChapterInfo[], id: string | undefined, comTitulo = true): string {
+  if (!id) return ''
+  const ch = chapters.find((c) => c.id === id)
+  if (!ch) return 'capítulo removido'
+  const r = rotuloCapitulo(chapters, ch.file)
+  return comTitulo ? `${r} — ${ch.title}` : r
 }
 
 function porOrdem(a: Cartao, b: Cartao): number {

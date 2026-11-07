@@ -9,9 +9,23 @@
 // ---------------------------------------------------------------------------
 export type FichaTipo = 'personagem' | 'lugar' | 'objeto' | 'grupo' | 'divindade'
 
+/** Mudança de valor de um atributo a partir de um capítulo (id estável). */
+export interface FichaMudanca {
+  valor: string
+  /** id estável do capítulo (ChapterInfo.id) a partir do qual o valor vale */
+  desde: string
+}
+
 export interface FichaCampo {
   nome: string
+  /** valor do início do livro (antes de qualquer mudança do histórico) */
   valor: string
+  /**
+   * "Mudou a partir de…": valores que passam a valer de um capítulo em diante.
+   * A continuidade e a IA usam o valor válido na posição do capítulo atual
+   * (ver shared/narrativa.ts). Por id de capítulo: reordenar não quebra.
+   */
+  historico?: FichaMudanca[]
 }
 
 export interface FichaRelacao {
@@ -44,7 +58,20 @@ export interface Ficha {
 // ---------------------------------------------------------------------------
 // ENREDO — coleção "enredo", documento único id "board". DONO: Universo/Enredo
 // ---------------------------------------------------------------------------
-export type CartaoTipo = 'cena' | 'virada' | 'personagem' | 'ideia' | 'local'
+export type CartaoTipo = 'cena' | 'virada' | 'personagem' | 'ideia' | 'local' | 'fato'
+
+/**
+ * Cartão "fato": de quem é a afirmação. "verdade" = fato do livro;
+ * "crenca" = o que uma ficha acredita ou afirma (pode ser falso).
+ */
+export type PerspectivaFato = { tipo: 'verdade' } | { tipo: 'crenca'; fichaId: string }
+
+/** Fio solto: promessa ou pergunta feita ao leitor, que pede pagamento. */
+export interface FioCartao {
+  status: 'aberto' | 'resolvido'
+  /** id estável do capítulo onde deve ser resolvido */
+  resolveEm?: string
+}
 
 /** Quem criou o cartão: o autor ou uma sugestão da IA ("→ Enredo", "Virar cartão"). */
 export type CartaoOrigem = 'autor' | 'ia'
@@ -72,6 +99,14 @@ export interface Cartao {
   origem: CartaoOrigem
   estado: CartaoEstado
   criadoEm: string
+  /** só no tipo "fato": verdade ou crença de uma ficha (padrão: verdade) */
+  perspectiva?: PerspectivaFato
+  /** só no tipo "fato": id estável do capítulo a partir do qual o leitor pode saber */
+  revelarEm?: string
+  /** só no tipo "fato": palavras ou nomes que entregam o fato (checagem de revelação antecipada) */
+  termos?: string[]
+  /** qualquer tipo: o cartão é um fio solto (plantado no capítulo do cartão) */
+  fio?: FioCartao
 }
 
 export interface Ligacao {
@@ -136,6 +171,8 @@ export interface Conflito {
   esperado: string
   encontrado: string
   explicacao: string
+  /** conflito com um cartão "fato" (revelação antecipada) em vez de uma ficha; fichaId = id do cartão */
+  cartaoId?: string
 }
 
 /** 'ia.beta'(dir, chapterFile) → BetaLeitura */
@@ -150,6 +187,51 @@ export interface BetaLeitura {
 }
 
 /** 'ia.resumo'(dir, chapterFile) → { resumo, travado, desatualizado } (cacheado em coleção "resumos") */
+
+// ---------------------------------------------------------------------------
+// IMPACTO — 'enredo.impacto'(dir, chapterFile) → ImpactoItem[]. DONO: Enredo
+// Capítulos SEGUINTES que podem ser afetados quando o capítulo muda. Só leitura.
+// ---------------------------------------------------------------------------
+export type ImpactoTipo = 'causa' | 'fato' | 'fio' | 'ficha'
+
+export interface ImpactoItem {
+  tipo: ImpactoTipo
+  /** arquivo do capítulo afetado (ausente = "o resto do livro") */
+  capitulo?: string
+  cartaoId?: string
+  fichaId?: string
+  texto: string
+}
+
+// ---------------------------------------------------------------------------
+// CONFERIR CONTRA O PLANO — 'ia.conferirPlano'(dir, chapterFile). DONO: IA
+// Compara o texto com sinopse, cartões, fios e fatos do capítulo. Só leitura.
+// ---------------------------------------------------------------------------
+export type PlanoAlvoTipo = 'sinopse' | 'cartao' | 'fio' | 'fato'
+
+export interface PlanoAlvo {
+  tipo: PlanoAlvoTipo
+  /** id do cartão (ausente na sinopse) */
+  id?: string
+  titulo: string
+}
+
+export interface ItemPlano {
+  tipo: 'cumprido' | 'faltando' | 'divergente'
+  alvo: PlanoAlvo
+  explicacao: string
+  /** citação exata do capítulo (só vem quando existe no texto) */
+  trecho?: string
+}
+
+export interface ConferenciaPlano {
+  itens: ItemPlano[]
+  /** itens do plano que a IA não avaliou */
+  semResposta: PlanoAlvo[]
+  /** o que ficou fora do contexto enviado à IA */
+  avisos: string[]
+  geradoEm: string
+}
 
 // ---------------------------------------------------------------------------
 // MEMÓRIA DO LIVRO — resumos por capítulo que a IA "lembra". DONO: IA

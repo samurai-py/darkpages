@@ -9,6 +9,7 @@ import { aiChat, aiSettings, estimarTokens, OLLAMA_CTX_MAX } from './index'
 import { hashTexto, regexNome } from './texto'
 import { instrucoesPerfil, lerPerfil } from './perfil'
 import { listarDecisoes } from './decisoes'
+import { fatosParaContexto, fichaNoCapitulo } from '../../shared/narrativa'
 
 /**
  * Montador ÚNICO do contexto que a IA recebe sobre o livro. Todo método de IA
@@ -22,6 +23,11 @@ import { listarDecisoes } from './decisoes'
  * - fichas citadas, com campos, grupo e relações (rótulo + nome do alvo);
  * - cartões do capítulo com origem/estado (provisório vai marcado como tal,
  *   descartado não entra) e as ligações de causa que tocam neles;
+ * - cartões "fato" do livro inteiro, pela posição do capítulo: fatos que o
+ *   leitor já sabe, segredos ainda não revelados (a IA não pode revelar) e
+ *   crenças de personagens (não são necessariamente verdade);
+ * - fichas com o valor de cada atributo válido NESTE capítulo (histórico
+ *   "mudou a partir de…", ver shared/narrativa.ts);
  * - decisões "manter" do Revisor;
  * - amostras da voz de outros capítulos (estilo).
  *
@@ -201,14 +207,14 @@ export function fichaTexto(f: Ficha, todas?: Ficha[]): string {
 // enredo
 // ---------------------------------------------------------------------------
 
-async function quadro(dir: string): Promise<EnredoBoard> {
+export async function lerQuadro(dir: string): Promise<EnredoBoard> {
   const b = await getDoc<EnredoBoard>(dir, 'enredo', 'board').catch(() => null)
   return { cartoes: Array.isArray(b?.cartoes) ? b.cartoes : [], ligacoes: Array.isArray(b?.ligacoes) ? b.ligacoes : [] }
 }
 
 /** Cartões ligados ao capítulo, na ordem do roteiro. Descartados ficam de fora. */
 export async function cartoesDoCapitulo(dir: string, file: string): Promise<Cartao[]> {
-  return (await quadro(dir)).cartoes
+  return (await lerQuadro(dir)).cartoes
     .filter((c) => c && c.capitulo === file && c.estado !== 'descartado')
     .sort((a, b) => (a.ordem ?? 1e9) - (b.ordem ?? 1e9))
 }
@@ -300,11 +306,28 @@ export interface FontesContexto {
   causas: CausaTexto[]
   decisoes: DecisaoRevisao[]
   voz: string[]
+  /** cartões "fato" que o leitor já sabe neste capítulo (linhas prontas, ver fatosParaContexto) */
+  fatos: string[]
+  /** fatos ainda não revelados ao leitor */
+  segredos: string[]
+  /** crenças/afirmações de personagens */
+  crencas: string[]
 }
 
-export const FONTES_VAZIAS: FontesContexto = { resumos: [], fichas: [], todas: [], cartoes: [], causas: [], decisoes: [], voz: [] }
+export const FONTES_VAZIAS: FontesContexto = {
+  resumos: [],
+  fichas: [],
+  todas: [],
+  cartoes: [],
+  causas: [],
+  decisoes: [],
+  voz: [],
+  fatos: [],
+  segredos: [],
+  crencas: []
+}
 
-type SecaoId = 'cena' | 'resumos-recentes' | 'fichas' | 'cartoes' | 'causas' | 'decisoes' | 'voz' | 'resumos-antigos'
+type SecaoId = 'cena' | 'segredos' | 'resumos-recentes' | 'fichas' | 'fatos' | 'crencas' | 'cartoes' | 'causas' | 'decisoes' | 'voz' | 'resumos-antigos'
 
 /**
  * Ordem de corte: o que vem primeiro entra primeiro; quando o orçamento
@@ -312,7 +335,20 @@ type SecaoId = 'cena' | 'resumos-recentes' | 'fichas' | 'cartoes' | 'causas' | '
  * Os 3 resumos mais próximos valem mais que fichas; os antigos são os
  * primeiros a sair.
  */
-export const PRIORIDADE: SecaoId[] = ['cena', 'resumos-recentes', 'fichas', 'cartoes', 'causas', 'decisoes', 'voz', 'resumos-antigos']
+export const PRIORIDADE: SecaoId[] = [
+  'cena',
+  // segredo que não chega à IA pode vazar no texto: entra antes de tudo o mais
+  'segredos',
+  'resumos-recentes',
+  'fichas',
+  'fatos',
+  'crencas',
+  'cartoes',
+  'causas',
+  'decisoes',
+  'voz',
+  'resumos-antigos'
+]
 
 /** Resumos mais próximos que sobem de prioridade. */
 const RESUMOS_RECENTES = 3
@@ -323,6 +359,9 @@ const TITULO: Record<SecaoId, string> = {
   'resumos-antigos': '## Resumo dos capítulos anteriores (memória do livro)',
   fichas: '## Fichas citadas neste capítulo',
   cartoes: '## Cartões do Enredo ligados a este capítulo',
+  fatos: '## Fatos do livro (o leitor já sabe)',
+  segredos: '## Segredos (o leitor ainda NÃO sabe; não revele)',
+  crencas: '## Crenças e afirmações de personagens (não são necessariamente verdade)',
   causas: '## Ligações de causa no Enredo',
   decisoes: '## Decisões do autor na revisão (respeite)',
   voz: '## Amostras da voz do autor em outros capítulos (ritmo, vocabulário, pontuação)'
@@ -361,22 +400,17 @@ export function montarContexto(f: FontesContexto, orcamentoTokens: number): Cont
     'resumos-recentes': [...recentes].reverse().map((r) => `- ${r.titulo}: ${r.resumo}`),
     'resumos-antigos': [...antigos].reverse().map((r) => `- ${r.titulo}: ${r.resumo}`),
     fichas: f.fichas.map((x) => fichaTexto(x.ficha, f.todas)),
-    cartoes: f.cartoes.filter((c) => c.estado !== 'descartado').map(cartaoTexto),
+    // cartões "fato" entram nas seções de fatos/segredos/crenças
+    cartoes: f.cartoes.filter((c) => c.estado !== 'descartado' && c.tipo !== 'fato').map(cartaoTexto),
+    fatos: f.fatos,
+    segredos: f.segredos,
+    crencas: f.crencas,
     causas: f.causas.map((c) => `- ${c.de} → causa → ${c.para}${c.rotulo ? ` (${c.rotulo})` : ''}`),
     decisoes: decisoesEmTexto(f.decisoes),
     voz: f.voz.map((v) => `> ${v}`)
   }
-  const dentro: Record<SecaoId, string[]> = {
-    cena: [],
-    'resumos-recentes': [],
-    'resumos-antigos': [],
-    fichas: [],
-    cartoes: [],
-    causas: [],
-    decisoes: [],
-    voz: []
-  }
-  const fora: Record<SecaoId, number> = { cena: 0, 'resumos-recentes': 0, 'resumos-antigos': 0, fichas: 0, cartoes: 0, causas: 0, decisoes: 0, voz: 0 }
+  const dentro = Object.fromEntries(PRIORIDADE.map((id) => [id, [] as string[]])) as Record<SecaoId, string[]>
+  const fora = Object.fromEntries(PRIORIDADE.map((id) => [id, 0])) as Record<SecaoId, number>
   let usado = 0
   const custo = (s: string): number => estimarTokens(s.length + 1)
   for (const id of PRIORIDADE) {
@@ -399,7 +433,7 @@ export function montarContexto(f: FontesContexto, orcamentoTokens: number): Cont
   const partes: string[] = []
   const resumos = [...dentro['resumos-antigos']].reverse().concat([...dentro['resumos-recentes']].reverse())
   if (resumos.length) partes.push(TITULO['resumos-recentes'], ...resumos)
-  for (const id of ['fichas', 'cena', 'cartoes', 'causas', 'decisoes', 'voz'] as SecaoId[]) {
+  for (const id of ['fichas', 'cena', 'fatos', 'crencas', 'segredos', 'cartoes', 'causas', 'decisoes', 'voz'] as SecaoId[]) {
     if (dentro[id].length) partes.push(TITULO[id], ...dentro[id])
   }
 
@@ -413,6 +447,9 @@ export function montarContexto(f: FontesContexto, orcamentoTokens: number): Cont
     )
   }
   if (fora.cena) avisos.push('Metadados da cena omitidos por tamanho.')
+  if (fora.segredos) avisos.push(`${fora.segredos} ${fora.segredos === 1 ? 'segredo omitido' : 'segredos omitidos'} por tamanho: a IA pode não saber o que ainda não revelar.`)
+  if (fora.fatos) avisos.push(`${fora.fatos} ${fora.fatos === 1 ? 'fato do livro omitido' : 'fatos do livro omitidos'} por tamanho.`)
+  if (fora.crencas) avisos.push(`${fora.crencas} ${fora.crencas === 1 ? 'crença de personagem omitida' : 'crenças de personagens omitidas'} por tamanho.`)
   if (fora.cartoes) avisos.push(`${fora.cartoes} ${fora.cartoes === 1 ? 'cartão do capítulo omitido' : 'cartões do capítulo omitidos'} por tamanho.`)
   if (fora.causas) avisos.push(`${fora.causas} ${fora.causas === 1 ? 'ligação de causa omitida' : 'ligações de causa omitidas'} por tamanho.`)
   if (fora.decisoes) avisos.push(`${fora.decisoes} ${fora.decisoes === 1 ? 'decisão de revisão omitida' : 'decisões de revisão omitidas'} por tamanho.`)
@@ -424,7 +461,7 @@ export function montarContexto(f: FontesContexto, orcamentoTokens: number): Cont
 // por método
 // ---------------------------------------------------------------------------
 
-export type MetodoIa = 'ideias' | 'beta' | 'continuidade' | 'redigir' | 'estilo' | 'insights' | 'resumoDia'
+export type MetodoIa = 'ideias' | 'beta' | 'continuidade' | 'redigir' | 'estilo' | 'insights' | 'resumoDia' | 'plano'
 
 export interface FontesDoMetodo {
   /** tokens para o bloco de contexto (fora o capítulo e o pedido) */
@@ -447,7 +484,9 @@ export const ORCAMENTO: Record<MetodoIa, FontesDoMetodo> = {
   // estilo: voz de outros capítulos + o que o autor mandou manter
   estilo: { orcamento: 2_500, resumos: 'nao', fichas: false, cena: false, cartoes: false, decisoes: true, voz: true },
   insights: { orcamento: 3_500, resumos: 'cache', fichas: true, cena: true, cartoes: true, decisoes: true, voz: false },
-  resumoDia: { orcamento: 1_500, resumos: 'cache', fichas: false, cena: true, cartoes: true, decisoes: false, voz: false }
+  resumoDia: { orcamento: 1_500, resumos: 'cache', fichas: false, cena: true, cartoes: true, decisoes: false, voz: false },
+  // conferir contra o plano: o plano vai à parte; o contexto ajuda a entender o capítulo
+  plano: { orcamento: 5_000, resumos: 'cache', fichas: true, cena: false, cartoes: true, decisoes: false, voz: false }
 }
 
 /**
@@ -496,7 +535,7 @@ export async function contextoIa(ctx: Ctx, dir: string, file: string, metodo: Me
   const decisoes = decisoesDoCapitulo(await listarDecisoes(dir), cap.id)
   const avisos: string[] = []
 
-  const board = cfg.cartoes ? await quadro(dir) : { cartoes: [], ligacoes: [] }
+  const board = cfg.cartoes ? await lerQuadro(dir) : { cartoes: [], ligacoes: [] }
   const cartoes = board.cartoes
     .filter((c) => c && c.capitulo === file && c.estado !== 'descartado')
     .sort((a, b) => (a.ordem ?? 1e9) - (b.ordem ?? 1e9))
@@ -507,6 +546,9 @@ export async function contextoIa(ctx: Ctx, dir: string, file: string, metodo: Me
   const extras = new Set([...cartoes.flatMap((c) => (Array.isArray(c.fichas) ? c.fichas : [])), cap.cena?.pov ?? '', cap.cena?.cenario ?? ''])
   for (const f of todas) if (extras.has(f.id) && !porMencao.some((x) => x.ficha.id === f.id)) porMencao.push({ ficha: f, mencoes: 0 })
 
+  const pos = p.chapters.findIndex((c) => c.file === file)
+  const fatos = cfg.cartoes ? fatosParaContexto(board.cartoes, pos, p.chapters, todas) : { fatos: [], segredos: [], crencas: [] }
+
   const nomeCapitulo = (f?: string): string => {
     if (!f) return ''
     const c = p.chapters.find((x) => x.file === f)
@@ -515,13 +557,15 @@ export async function contextoIa(ctx: Ctx, dir: string, file: string, metodo: Me
 
   const fontes: FontesContexto = {
     resumos: cfg.resumos === 'nao' ? [] : await resumosAnteriores(ctx, dir, file, cfg.resumos === 'gerar', avisos),
-    fichas: cfg.fichas ? porMencao : [],
+    // atributos com o valor válido neste capítulo ("mudou a partir de…")
+    fichas: cfg.fichas ? porMencao.map((x) => ({ ...x, ficha: fichaNoCapitulo(x.ficha, pos, p.chapters) })) : [],
     todas,
     ...(cfg.cena && cap.cena ? { cena: cap.cena } : {}),
     cartoes,
     causas: cfg.cartoes ? causasDosCartoes(board, new Set(cartoes.map((c) => c.id)), nomeCapitulo) : [],
     decisoes: cfg.decisoes ? decisoes : [],
-    voz: cfg.voz ? await amostrasDeOutrosCapitulos(dir, p.chapters, file) : []
+    voz: cfg.voz ? await amostrasDeOutrosCapitulos(dir, p.chapters, file) : [],
+    ...fatos
   }
   const s = await aiSettings(ctx)
   const orc = orcamentoEfetivo(cfg.orcamento, s.provider === 'ollama', op.reservaCaracteres ?? cap.body.length, op.maxTokens ?? 1500)

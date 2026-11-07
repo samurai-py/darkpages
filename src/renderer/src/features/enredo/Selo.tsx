@@ -1,6 +1,9 @@
 import type { ReactElement } from 'react'
 import type { Cartao, CartaoEstado } from '../../../../shared/models'
+import type { ChapterInfo } from '../../../../shared/types'
+import { estadoFio } from '../../../../shared/narrativa'
 import { Mini } from '../universo/icons'
+import { rotuloPorId } from './board'
 
 /**
  * Selo de origem/estado do cartão. Cartão canônico do autor não leva selo
@@ -47,6 +50,20 @@ export function Selo({ c, compacto = false }: { c: Cartao; compacto?: boolean })
       <Mini name={icone} size={12} />
       {!compacto && textoSelo(c)}
       {compacto && <span className="en-sr">{textoSelo(c)}</span>}
+    </span>
+  )
+}
+
+/** Selo do fio solto: aberto (com onde resolve), resolvido ou atrasado. */
+export function FioSelo({ c, chapters }: { c: Cartao; chapters: ChapterInfo[] }): ReactElement | null {
+  const est = estadoFio(c, chapters)
+  if (!est) return null
+  const onde = c.fio?.resolveEm ? rotuloPorId(chapters, c.fio.resolveEm, false) : ''
+  const txt = est === 'resolvido' ? 'Fio resolvido' : est === 'atrasado' ? `Fio atrasado${onde ? ` · ${onde}` : ''}` : `Fio aberto${onde ? ` → ${onde}` : ''}`
+  return (
+    <span className={`en-fselo f-${est}`} title={txt}>
+      <Mini name="fio" size={12} />
+      {txt}
     </span>
   )
 }

@@ -2,8 +2,8 @@ import type { Ctx } from '../api/context'
 import { openProject, readChapter } from '../project'
 import { getDoc, listDocs, putDoc } from '../store/docs'
 import { aiChatCom, aiSettings, extractJson, NOME_PROVEDOR, modeloAutomatico, provedorExterno, type AiSettings } from '../ai'
-import { contextoIa, fichas, type ContextoIa } from '../ai/contexto'
-import { continuidadeDeterministica, type CapituloOrdem, type OpcoesContinuidade } from '../ai/continuidade'
+import { contextoIa, fichas, lerQuadro, type ContextoIa } from '../ai/contexto'
+import { continuidadeDeterministica, revelacoesAntecipadas, type CapituloOrdem, type OpcoesContinuidade } from '../ai/continuidade'
 import { lerPerfil } from '../ai/perfil'
 import { listarDecisoes } from '../ai/decisoes'
 import { conflitoMantido, decisoesDoCapitulo, normalizar, palavrasMantidas, trechoMantido } from '../../shared/decisoes'
@@ -12,7 +12,7 @@ import { avisosRepeticao } from './repeticao'
 import { getDocCapitulo, putDocCapitulo } from '../store/capitulo-docs'
 import { destaque, type Diario } from '../sync/progresso'
 import { countWords } from '../../shared/types'
-import type { DecisaoRevisao, Ficha, Insight, InsightAcao, InsightTipo, ProativoEstado, ProativoSettings } from '../../shared/models'
+import type { Cartao, DecisaoRevisao, Ficha, Insight, InsightAcao, InsightTipo, ProativoEstado, ProativoSettings } from '../../shared/models'
 import { diaLocal, emSilencio, proativoSettings, reservarChamada, usoHoje } from './config'
 
 /**
@@ -138,6 +138,25 @@ export function continuidadeLocal(
       : { tipo: 'abrirFicha', fichaId: c.fichaId }
     return { tipo: 'continuidade' as const, capitulo: file, trecho: c.trecho, texto: c.explicacao, acao, origem: 'local' as const }
   })
+}
+
+/**
+ * Revelação antecipada (cartões "fato") para o modo proativo: um termo que
+ * entrega um fato aparece antes do capítulo em que o leitor pode saber.
+ * Respeita "Foi de propósito" e as decisões do Revisor.
+ */
+export function revelacoesLocal(
+  md: string,
+  file: string,
+  capitulos: CapituloOrdem[],
+  cartoes: Cartao[],
+  ignorados: string[] = [],
+  decisoes: DecisaoRevisao[] = [],
+  capId?: string
+): Novo[] {
+  return revelacoesAntecipadas(md, file, capitulos, cartoes)
+    .filter((c) => !conflitoMantido(c, ignorados, decisoes, capId))
+    .map((c) => ({ tipo: 'continuidade' as const, capitulo: file, trecho: c.trecho, texto: c.explicacao, origem: 'local' as const }))
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +305,9 @@ export async function analisarCapitulo(ctx: Ctx, dir: string, file: string, moti
     const perfil = await lerPerfil(dir)
     const decisoes = decisoesDoCapitulo(await listarDecisoes(dir), cap.id)
     if (cfg.tipos.continuidade) {
-      locais.push(...continuidadeLocal(md, file, lista, (await openProject(dir)).chapters, perfil, cap.ignorados ?? [], decisoes, cap.id))
+      const capitulos = (await openProject(dir)).chapters
+      locais.push(...continuidadeLocal(md, file, lista, capitulos, perfil, cap.ignorados ?? [], decisoes, cap.id))
+      locais.push(...revelacoesLocal(md, file, capitulos, (await lerQuadro(dir)).cartoes, cap.ignorados ?? [], decisoes, cap.id))
     }
     if (cfg.tipos.estilo) locais.push(...repeticoesProximas(md, 3, 30, palavrasMantidas(decisoes)).map((x) => ({ ...x, capitulo: file })))
     novos += await gravarNovos(dir, locais)

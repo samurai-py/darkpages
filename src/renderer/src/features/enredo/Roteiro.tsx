@@ -4,7 +4,7 @@ import type { ChapterInfo } from '../../../../shared/types'
 import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { doCapitulo, rotuloCapitulo, vizinho } from './board'
-import { Selo } from './Selo'
+import { FioSelo, Selo } from './Selo'
 
 export interface RoteiroProps {
   board: EnredoBoard
@@ -16,6 +16,8 @@ export interface RoteiroProps {
   onMover: (id: string, capitulo: string, antesDe: string | null) => void
   onCriarCena: (capitulo: string) => void
   onAbrirCapitulo: (file: string) => void
+  /** sinopse da cena de cada capítulo (arquivo → texto) */
+  sinopses?: Record<string, string>
 }
 
 const SO_CENAS = ['cena' as const]
@@ -67,6 +69,7 @@ export function Roteiro(props: RoteiroProps): ReactElement {
               <Mini name="mais" /> Cena
             </button>
           </header>
+          {g.cap && props.sinopses?.[g.cap] && <p className="en-sinopse en-rsinopse">{props.sinopses[g.cap]}</p>}
           {g.cenas.length === 0 && <p className="label en-rvazio">Nenhuma cena. Solte uma aqui ou crie.</p>}
           <ol className="en-rlist">
             {g.cenas.map((c, i) => {
@@ -89,6 +92,7 @@ export function Roteiro(props: RoteiroProps): ReactElement {
                     <span className="en-rtl">
                       <span className="disp en-rt">{c.titulo || 'Cena sem título'}</span>
                       <Selo c={c} />
+                      <FioSelo c={c} chapters={chapters} />
                     </span>
                     {c.texto && <span className="en-rx">{c.texto}</span>}
                     {ligadas.length > 0 && (

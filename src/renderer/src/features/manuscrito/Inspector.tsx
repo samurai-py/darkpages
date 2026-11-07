@@ -12,8 +12,10 @@ import {
   type IdeiaTipo,
   type IdeiasResult
 } from '../../../../shared/models'
+import type { ChapterInfo } from '../../../../shared/types'
 import { Ico } from './icones'
 import { novoId } from './texto'
+import { ConferirPlano, Impacto } from './Plano'
 
 interface Props {
   dir: string
@@ -36,6 +38,11 @@ interface Props {
   onRedigir: (ideia: Ideia) => Promise<void>
   /** já existe um rascunho sendo escrito/pendente */
   redigindo: boolean
+  /** capítulos do livro (impacto: rótulos e links) */
+  capitulos: ChapterInfo[]
+  onAbrirCapitulo: (file: string) => void
+  /** abre o cartão no Enredo */
+  onAbrirCartao: (id: string) => void
 }
 
 /** Retratos carregados uma vez por livro (data URL ou null). */
@@ -120,6 +127,15 @@ function PainelCena(p: Props): ReactElement {
   const cenario = p.fichas.find((f) => f.id === p.cena.cenario)
   const aberta = p.fichas.find((f) => f.id === fichaAberta)
   const set = (patch: Partial<CenaMeta>): void => p.onCena({ ...p.cena, ...patch })
+  const planoProps = {
+    dir: p.dir,
+    file: p.file,
+    capitulos: p.capitulos,
+    antes: p.antesDaIA,
+    onAbrirCapitulo: p.onAbrirCapitulo,
+    onAbrirCartao: p.onAbrirCartao,
+    onAbrirFicha: p.onAbrirFicha
+  }
 
   return (
     <>
@@ -220,7 +236,7 @@ function PainelCena(p: Props): ReactElement {
 
       <section className="ms-sec">
         <span className="ms-eb">Continuidade</span>
-        <p className="ms-hint">A IA compara o capítulo com os atributos das fichas (cor dos olhos, quem já morreu…).</p>
+        <p className="ms-hint">Compara o capítulo com os atributos das fichas (cor dos olhos, quem já morreu…) e com os segredos que ainda não podem aparecer.</p>
         <button type="button" className="btn sm" onClick={p.onChecar} disabled={p.checando}>
           <Ico n="olho" size={15} /> {p.checando ? 'Checando…' : 'Checar continuidade'}
         </button>
@@ -233,14 +249,20 @@ function PainelCena(p: Props): ReactElement {
                   {c.fichaNome} · {c.campo}
                 </strong>
                 <span>
-                  Na ficha: <b>{c.esperado}</b>. Aqui: <b className="ms-alerta">{c.encontrado}</b>.
+                  {c.cartaoId ? 'No Enredo' : 'Na ficha'}: <b>{c.esperado}</b>. Aqui: <b className="ms-alerta">{c.encontrado}</b>.
                 </span>
                 <q className="ms-trecho">{c.trecho}</q>
                 {c.explicacao && <span className="ms-hint">{c.explicacao}</span>}
                 <div className="ms-row ms-row-l">
-                  <button type="button" className="btn sm" onClick={() => p.onAbrirFicha(c.fichaId)}>
-                    Abrir ficha
-                  </button>
+                  {c.cartaoId ? (
+                    <button type="button" className="btn sm" onClick={() => c.cartaoId && p.onAbrirCartao(c.cartaoId)}>
+                      Abrir cartão
+                    </button>
+                  ) : (
+                    <button type="button" className="btn sm" onClick={() => p.onAbrirFicha(c.fichaId)}>
+                      Abrir ficha
+                    </button>
+                  )}
                   <button type="button" className="btn sm ms-quieto" onClick={() => p.onIgnorar(c)}>
                     Foi de propósito
                   </button>
@@ -250,6 +272,9 @@ function PainelCena(p: Props): ReactElement {
           </ul>
         )}
       </section>
+
+      <ConferirPlano {...planoProps} />
+      <Impacto {...planoProps} />
 
       <section className="ms-sec">
         <label className="ms-eb" htmlFor="ms-notas">

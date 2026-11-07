@@ -288,6 +288,29 @@
 .ms-furo b { color: var(--text); }
 .ms-trecho { font-family: var(--fb); font-style: italic; font-size: 14px; color: var(--text); }
 
+/* conferir com o plano e impacto (só leitura) */
+.ms-plano, .ms-impacto, .ms-impacto ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ms-pitem {
+  display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: var(--rad); border: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.45; color: var(--muted); animation: msIn .35s var(--ease) both;
+}
+.ms-pitem strong, .ms-palvo { color: var(--text); font-size: 13px; text-align: left; }
+.ms-pitem-h { display: flex; align-items: center; gap: 8px; }
+.ms-pitem-h .ms-hint { margin-left: auto; }
+.ms-ptag {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: var(--chipbg); color: var(--muted); white-space: nowrap;
+}
+.ms-pitem.t-faltando { border-color: var(--alert); }
+.ms-pitem.t-faltando .ms-ptag { color: var(--alert); }
+.ms-pitem.t-divergente { border-style: dashed; border-color: var(--acc); }
+.ms-pitem.t-divergente .ms-ptag { color: var(--acc); }
+.ms-pitem.t-cumprido .ms-ptag { color: var(--acc2); }
+.ms-icap { display: block; font-size: 13px; color: var(--text); margin-bottom: 4px; text-align: left; }
+.ms-impacto > li { padding: 10px 12px; border-radius: var(--rad); border: 1px solid var(--line); }
+.ms-iitem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.ms-iitem .ms-link { font-size: 12px; }
+
 /* ideias */
 .ms-painel-ideias { gap: 0; }
 .ms-ideias-h { padding-bottom: 4px; }

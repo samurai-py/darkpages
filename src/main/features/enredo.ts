@@ -1,7 +1,9 @@
-import { bookDir, type Handlers } from '../api/context'
-import { getDoc, newId, putDoc } from '../store/docs'
+import { bookDir, str, type Handlers } from '../api/context'
+import { getDoc, listDocs, newId, putDoc } from '../store/docs'
+import { openProject, readChapter } from '../project'
 import { desligarDosMapas } from './mapas'
-import type { Cartao, CartaoEstado, CartaoTipo, EnredoBoard, Ligacao } from '../../shared/models'
+import { calcularImpacto } from '../../shared/narrativa'
+import type { Cartao, CartaoEstado, CartaoTipo, EnredoBoard, Ficha, ImpactoItem, Ligacao } from '../../shared/models'
 
 /**
  * Enredo (E1–E5): quadro único na coleção "enredo", documento "board".
@@ -11,10 +13,13 @@ import type { Cartao, CartaoEstado, CartaoTipo, EnredoBoard, Ligacao } from '../
 
 const COLECAO = 'enredo'
 const DOC = 'board'
-const TIPOS: CartaoTipo[] = ['cena', 'virada', 'personagem', 'ideia', 'local']
+const TIPOS: CartaoTipo[] = ['cena', 'virada', 'personagem', 'ideia', 'local', 'fato']
 const ESTADOS: CartaoEstado[] = ['canonico', 'provisorio', 'descartado']
 const CAPITULO = /^\d{3}-[a-z0-9-]+\.md$/
 const ID = /^[a-z0-9][a-z0-9-]{0,80}$/
+/** id estável de capítulo (ChapterInfo.id) */
+const CAP_ID = /^ch-[a-z0-9]{6,32}$/
+const MAX_TERMOS = 30
 const MAX_CARTOES = 5000
 
 function texto(v: unknown, max: number): string {
@@ -49,6 +54,24 @@ function cartao(v: unknown): Cartao | null {
   const cap = texto(c.capitulo, 200)
   if (CAPITULO.test(cap)) out.capitulo = cap
   if (typeof c.ordem === 'number' && Number.isFinite(c.ordem)) out.ordem = numero(c.ordem)
+  // fato: perspectiva, revelação e termos (só no tipo "fato")
+  if (tipo === 'fato') {
+    const p = c.perspectiva as Record<string, unknown> | undefined
+    const fichaId = p && typeof p === 'object' ? texto(p.fichaId, 100) : ''
+    out.perspectiva = p && p.tipo === 'crenca' && ID.test(fichaId) ? { tipo: 'crenca', fichaId } : { tipo: 'verdade' }
+    const rev = texto(c.revelarEm, 40)
+    if (CAP_ID.test(rev)) out.revelarEm = rev
+    if (Array.isArray(c.termos)) {
+      const termos = [...new Set(c.termos.filter((t): t is string => typeof t === 'string').map((t) => t.trim().slice(0, 80)).filter(Boolean))].slice(0, MAX_TERMOS)
+      if (termos.length) out.termos = termos
+    }
+  }
+  // fio solto: qualquer tipo
+  const fio = c.fio as Record<string, unknown> | undefined
+  if (fio && typeof fio === 'object') {
+    const resolveEm = texto(fio.resolveEm, 40)
+    out.fio = { status: fio.status === 'resolvido' ? 'resolvido' : 'aberto', ...(CAP_ID.test(resolveEm) ? { resolveEm } : {}) }
+  }
   return out
 }
 
@@ -80,6 +103,25 @@ export function sanearBoard(v: unknown): EnredoBoard {
 }
 
 export const handlers: Handlers = {
+  /**
+   * 'enredo.impacto'(dir, chapterFile) → ImpactoItem[]: capítulos seguintes
+   * que podem ser afetados se este capítulo mudar (causas no Enredo, fatos,
+   * fios e fichas com mudança a partir dele). Só leitura.
+   */
+  'enredo.impacto': async (ctx, dir, file): Promise<ImpactoItem[]> => {
+    const d = await bookDir(ctx, dir)
+    const f = str(file, 200)
+    if (!CAPITULO.test(f)) throw new Error('Capítulo inválido')
+    const p = await openProject(d)
+    const i = p.chapters.findIndex((c) => c.file === f)
+    if (i < 0) throw new Error('Capítulo não encontrado')
+    const board = sanearBoard(await getDoc<EnredoBoard>(d, COLECAO, DOC))
+    const fichas = (await listDocs<Ficha>(d, 'universo').catch(() => [])).filter((x) => x && typeof x.nome === 'string')
+    const textos: Record<string, string> = {}
+    for (const c of p.chapters.slice(i + 1)) textos[c.file] = (await readChapter(d, c.file)).body
+    return calcularImpacto(f, p.chapters, board, fichas, textos)
+  },
+
   /** 'enredo.board'(dir) → EnredoBoard (vazio se ainda não existe). */
   'enredo.board': async (ctx, dir): Promise<EnredoBoard> => {
     const d = await bookDir(ctx, dir)

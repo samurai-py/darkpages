@@ -68,7 +68,15 @@ export function normalizarFicha(raw: Partial<Ficha> & { id: string }): Ficha {
     campos: Array.isArray(raw.campos)
       ? raw.campos
           .filter((c) => c && typeof c.nome === 'string')
-          .map((c) => ({ nome: c.nome, valor: typeof c.valor === 'string' ? c.valor : '' }))
+          .map((c) => {
+            const campo: FichaCampo = { nome: c.nome, valor: typeof c.valor === 'string' ? c.valor : '' }
+            // "mudou a partir de…" (id estável do capítulo)
+            const hist = Array.isArray(c.historico)
+              ? c.historico.filter((h) => h && typeof h.desde === 'string' && typeof h.valor === 'string').map((h) => ({ valor: h.valor, desde: h.desde }))
+              : []
+            if (hist.length) campo.historico = hist
+            return campo
+          })
       : [],
     relacoes: Array.isArray(raw.relacoes)
       ? raw.relacoes

@@ -577,8 +577,17 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     go('universo', { ficha: id })
   }
 
+  const abrirCartao = async (id: string): Promise<void> => {
+    await flushAll()
+    go('enredo', { cartao: id })
+  }
+
   const furos: Furo[] = useMemo(
-    () => conflitos.map((c) => ({ trecho: c.trecho, titulo: `${c.fichaNome} · ${c.campo}: na ficha “${c.esperado}”, aqui “${c.encontrado}”` })),
+    () =>
+      conflitos.map((c) => ({
+        trecho: c.trecho,
+        titulo: c.cartaoId ? `Revelação antecipada · ${c.fichaNome}: ${c.esperado}` : `${c.fichaNome} · ${c.campo}: na ficha “${c.esperado}”, aqui “${c.encontrado}”`
+      })),
     [conflitos]
   )
 
@@ -778,15 +787,27 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
                   !
                 </span>
                 <div className="ms-toast-c">
-                  <strong>Furo de continuidade</strong>
-                  <span>
-                    Na ficha, {t.conflito.fichaNome} tem <b>{t.conflito.campo.toLowerCase()} {t.conflito.esperado}</b>. Aqui:{' '}
-                    <b className="ms-alerta">{t.conflito.encontrado}</b>.
-                  </span>
+                  <strong>{t.conflito.cartaoId ? 'Revelação antecipada' : 'Furo de continuidade'}</strong>
+                  {t.conflito.cartaoId ? (
+                    <span>
+                      {t.conflito.explicacao} Aqui: <b className="ms-alerta">{t.conflito.encontrado}</b>.
+                    </span>
+                  ) : (
+                    <span>
+                      Na ficha, {t.conflito.fichaNome} tem <b>{t.conflito.campo.toLowerCase()} {t.conflito.esperado}</b>. Aqui:{' '}
+                      <b className="ms-alerta">{t.conflito.encontrado}</b>.
+                    </span>
+                  )}
                   <div className="ms-row ms-row-l">
-                    <button type="button" className="btn sm" onClick={() => void abrirFicha(t.conflito.fichaId)}>
-                      Abrir ficha
-                    </button>
+                    {t.conflito.cartaoId ? (
+                      <button type="button" className="btn sm" onClick={() => t.conflito.cartaoId && void abrirCartao(t.conflito.cartaoId)}>
+                        Abrir cartão
+                      </button>
+                    ) : (
+                      <button type="button" className="btn sm" onClick={() => void abrirFicha(t.conflito.fichaId)}>
+                        Abrir ficha
+                      </button>
+                    )}
                     <button type="button" className="btn sm ms-quieto" onClick={() => void ignorar(t.conflito)}>
                       Foi de propósito
                     </button>
@@ -853,6 +874,9 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           antesDaIA={flushAll}
           onRedigir={(i) => redigir({ tipo: i.tipo, texto: i.ligadoA ? `${i.texto} (ligado a: ${i.ligadoA})` : i.texto }, true)}
           redigindo={!!rascunho?.carregando}
+          capitulos={project.chapters}
+          onAbrirCapitulo={(f) => void switchTo(f)}
+          onAbrirCartao={(id) => void abrirCartao(id)}
         />
       )}
 

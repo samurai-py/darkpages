@@ -106,7 +106,20 @@
 .uv-chipin:focus { outline: none; border-color: var(--acc); border-style: solid; }
 
 .uv-campos { display: flex; flex-direction: column; gap: 6px; }
-.uv-campo { display: grid; grid-template-columns: 100px minmax(0, 1fr) 32px; gap: 8px; align-items: center; }
+.uv-campo { display: grid; grid-template-columns: 100px minmax(0, 1fr) 32px 32px; gap: 6px; align-items: center; }
+.uv-cgrupo { display: flex; flex-direction: column; gap: 4px; }
+/* "mudou a partir de…": linha recuada sob o atributo */
+.uv-mud {
+  display: grid; grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1fr) 32px; gap: 6px; align-items: center;
+  margin-left: 22px; padding: 4px 0 4px 10px; border-radius: 8px; background: color-mix(in srgb, var(--acc) 4%, transparent);
+}
+.uv-mud .select { min-height: 34px; font-size: 12.5px; padding: 0 8px; min-width: 0; }
+.uv-mud .label { white-space: nowrap; }
+.uv-legado {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: calc(var(--rad) - 2px);
+  border: 1px dashed var(--acc); font-size: 12.5px; line-height: 1.45; color: var(--muted);
+}
+.uv-legado b { color: var(--text); }
 .uv-cnome {
   font: inherit; font-size: 13px; color: var(--muted); background: transparent; border: 0; padding: 4px 2px; min-width: 0;
   border-radius: 4px;

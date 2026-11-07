@@ -9,10 +9,57 @@ export type MiniIcone =
   | 'busca' | 'mais' | 'fechar' | 'lixo' | 'enviar' | 'faisca' | 'abrir' | 'subir' | 'descer'
   | 'importar' | 'arrastar' | 'capitulo' | 'ligar'
   | 'personagem' | 'lugar' | 'objeto' | 'grupo' | 'divindade'
-  | 'cena' | 'virada' | 'ideia' | 'local'
+  | 'cena' | 'virada' | 'ideia' | 'local' | 'fato'
+  | 'fio' | 'leitor' | 'impacto' | 'historico'
   | 'provisorio' | 'canonico' | 'descartar' | 'memoria' | 'travar'
 
 const P: Record<MiniIcone, ReactElement> = {
+  /** fato do livro: lacre com fechadura (revelado na hora certa) */
+  fato: (
+    <>
+      <path d="M6 4.5h12v15H6z" {...D} />
+      <path d="M6 4.5h12v15H6zM9 8h6" />
+      <circle cx="12" cy="13" r="1.8" {...A} />
+      <path d="M12 14.6v2.4" />
+    </>
+  ),
+  /** fio solto: linha que sai de um ponto e fica em aberto */
+  fio: (
+    <>
+      <circle cx="6" cy="17.5" r="2.2" {...D} />
+      <circle cx="6" cy="17.5" r="2.2" />
+      <path d="M7.8 16.2c2.5-1.6 1-5.2 3.8-6.4 2.6-1.1 4.4 1.6 6.6-.6" />
+      <path d="M18.2 9.2l1.6-1.6" strokeDasharray="1.6 1.8" />
+      <circle cx="20.4" cy="6.4" r="1" {...A} />
+    </>
+  ),
+  /** o que o leitor sabe: olho com página */
+  leitor: (
+    <>
+      <path d="M2.8 12s3.4-6 9.2-6 9.2 6 9.2 6-3.4 6-9.2 6-9.2-6-9.2-6z" {...D} />
+      <path d="M2.8 12s3.4-6 9.2-6 9.2 6 9.2 6-3.4 6-9.2 6-9.2-6-9.2-6z" />
+      <circle cx="12" cy="12" r="2.6" />
+      <circle cx="12" cy="12" r="1" {...A} />
+    </>
+  ),
+  /** impacto: ondas que se espalham adiante */
+  impacto: (
+    <>
+      <circle cx="6.5" cy="12" r="2.2" {...A} />
+      <path d="M10.5 7.5a6.5 6.5 0 010 9" />
+      <path d="M14 5a10 10 0 010 14" />
+      <path d="M17.5 3a13 13 0 010 18" strokeDasharray="2 2.4" />
+    </>
+  ),
+  /** valor que muda ao longo do livro */
+  historico: (
+    <>
+      <path d="M4 17.5h16" />
+      <path d="M4 17.5V9l5 3.5 5-6 6 4" {...D} />
+      <path d="M4 9l5 3.5 5-6 6 4" />
+      <circle cx="14" cy="6.5" r="1.4" {...A} />
+    </>
+  ),
   /** ideia da IA ainda não aceita: contorno tracejado + faísca */
   provisorio: (
     <>

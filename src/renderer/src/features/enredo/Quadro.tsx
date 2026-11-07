@@ -46,7 +46,8 @@ const COR_TIPO: Record<CartaoTipo, string> = {
   virada: 'var(--acc)',
   personagem: 'var(--text)',
   ideia: 'var(--muted)',
-  local: 'var(--line)'
+  local: 'var(--line)',
+  fato: 'var(--acc)'
 }
 
 type Filtro = CartaoTipo | 'todos'
