@@ -42,11 +42,11 @@ function CartaoNodeBase({ data, selected }: NodeProps<CartaoNodeT>): ReactElemen
       <div className={`en-person es-${c.estado}${selected ? ' sel' : ''}`}>
         <Alcas />
         <span className="en-face">
-          {/* a imagem do próprio cartão vale mais que o retrato da ficha */}
-          {c.imagem ? (
-            <CartaoImagem dir={dir} nome={c.imagem} className="en-face-img" />
-          ) : f ? (
+          {/* cartão de personagem mostra sempre o retrato da ficha; a imagem do cartão só sem ficha ligada */}
+          {f ? (
             <Retrato ficha={f} url={retrato} />
+          ) : c.imagem ? (
+            <CartaoImagem dir={dir} nome={c.imagem} className="en-face-img" />
           ) : (
             <Retrato ficha={{ nome, tipo: 'personagem' }} url={null} />
           )}
