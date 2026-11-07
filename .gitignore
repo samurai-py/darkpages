@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+resources/bin/
+*.log
+.DS_Store
+# projetos de teste gerados pelo spike
+spike-output/

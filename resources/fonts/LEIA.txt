@@ -1,0 +1,2 @@
+Coloque aqui fontes .ttf/.otf (OFL) usadas no miolo, ex.: EB Garamond.
+O Typst também procura fontes instaladas no sistema.

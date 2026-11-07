@@ -1,0 +1,49 @@
+{
+  "name": "folio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Folio — escrever, organizar e diagramar livros",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "fetch:typst": "node scripts/fetch-typst.mjs",
+    "spike:pdf": "tsx scripts/spike-pdf.ts",
+    "web": "electron-vite build && tsx src/server/index.ts",
+    "web:tailscale": "electron-vite build && FOLIO_HOST=$(tailscale ip -4 | head -1) tsx src/server/index.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.1.0",
+    "@fontsource/cormorant-garamond": "^5.1.0",
+    "@fontsource/eb-garamond": "^5.1.0",
+    "@fontsource/grenze-gotisch": "^5.1.0",
+    "@tiptap/extension-character-count": "^2.27.3",
+    "@tiptap/extension-placeholder": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
+    "@tiptap/react": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
+    "@xyflow/react": "^12.12.1",
+    "docx": "^9.15.3",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "opentype.js": "^1.3.4",
+    "tiptap-markdown": "^0.8.10",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/opentype.js": "^1.3.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
