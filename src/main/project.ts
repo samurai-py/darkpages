@@ -309,6 +309,15 @@ export async function addChapter(dir: string, title: string, kind: ChapterKind =
   return openProject(dir)
 }
 
+/** Título e autor do livro (projeto.yaml); o resto dos metadados fica como está. */
+export async function saveMeta(dir: string, title: string, author: string): Promise<Project> {
+  const p = await openProject(dir)
+  const t = title.trim()
+  if (!t) throw new Error('O título do livro não pode ficar vazio')
+  await atomicWrite(join(dir, META_FILE), YAML.stringify({ ...p.meta, title: t, author: author.trim() }))
+  return openProject(dir)
+}
+
 export async function saveLayout(dir: string, layout: LayoutSettings): Promise<Project> {
   const p = await openProject(dir)
   await atomicWrite(join(dir, META_FILE), YAML.stringify({ ...p.meta, layout }))

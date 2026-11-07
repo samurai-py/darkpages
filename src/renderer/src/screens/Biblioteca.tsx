@@ -46,6 +46,24 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
   const [busy, setBusy] = useState<string | null>(null)
   const [editMeta, setEditMeta] = useState(false)
   const [metaIn, setMetaIn] = useState('')
+  const [renomear, setRenomear] = useState(false)
+  const [novoTitulo, setNovoTitulo] = useState('')
+  const [novoAutor, setNovoAutor] = useState('')
+  const [erroNome, setErroNome] = useState<string | null>(null)
+
+  const salvarNome = async (e: FormEvent): Promise<void> => {
+    e.preventDefault()
+    if (!feat) return
+    setErroNome(null)
+    try {
+      const project = await folio.saveMeta(feat.project.dir, novoTitulo, novoAutor)
+      setFeat({ ...feat, project })
+      setRecents((l) => (l ?? []).map((r) => (r.dir === project.dir ? { ...r, title: project.meta.title } : r)))
+      setRenomear(false)
+    } catch (err) {
+      setErroNome(errMsg(err))
+    }
+  }
 
   useEffect(() => {
     let vivo = true
@@ -194,7 +212,39 @@ export function Biblioteca({ onOpen, go }: { onOpen: (p: Project) => void; go: (
           </div>
           <div className="bib-feat-body">
             <span className="bib-eb acc">Continuar escrevendo</span>
-            <h2 id="bib-feat-t" className="disp bib-feat-title">{feat.project.meta.title}</h2>
+            {renomear ? (
+              <form className="bib-renomear" onSubmit={(e) => void salvarNome(e)}>
+                <label className="field">
+                  Título do livro
+                  <input className="input" value={novoTitulo} onChange={(e) => setNovoTitulo(e.target.value)} autoFocus />
+                </label>
+                <label className="field">
+                  Autor (como sai na capa)
+                  <input className="input" value={novoAutor} onChange={(e) => setNovoAutor(e.target.value)} />
+                </label>
+                {erroNome && <p className="err" role="alert">{erroNome}</p>}
+                <div className="bib-row">
+                  <button type="submit" className="btn sm pri" disabled={!novoTitulo.trim()}>Salvar</button>
+                  <button type="button" className="btn sm" onClick={() => setRenomear(false)}>Cancelar</button>
+                </div>
+              </form>
+            ) : (
+              <h2 id="bib-feat-t" className="disp bib-feat-title">
+                {feat.project.meta.title}
+                <button
+                  type="button"
+                  className="bib-link bib-renomear-b"
+                  onClick={() => {
+                    setNovoTitulo(feat.project.meta.title)
+                    setNovoAutor(feat.project.meta.author)
+                    setErroNome(null)
+                    setRenomear(true)
+                  }}
+                >
+                  renomear
+                </button>
+              </h2>
+            )}
             {d?.capitulo && (
               <span className="muted">
                 {d.capitulo.numero > 0 ? `Capítulo ${d.capitulo.numero} · ` : ''}

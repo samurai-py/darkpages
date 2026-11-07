@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises'
-import { addChapter, createProject, openProject, readChapter, saveChapter, saveLayout } from '../project'
+import { addChapter, createProject, openProject, readChapter, saveChapter, saveMeta, saveLayout } from '../project'
 import { exportPrintPdf } from '../layout/export'
 import { recentsStore } from '../recents'
 import { deleteAsset, deleteDoc, getAsset, getDoc, listDocs, putAsset, putDoc } from '../store/docs'
@@ -35,6 +35,8 @@ export const core: Handlers = {
     saveChapter(await bookDir(ctx, dir), str(file, 200), str(title, 300), str(body)),
   addChapter: async (ctx, dir, title, kind) =>
     addChapter(await bookDir(ctx, dir), str(title, 300), kind === 'parte' ? 'parte' : 'capitulo'),
+  saveMeta: async (ctx, dir, title, author) =>
+    ctx.remember(await saveMeta(await bookDir(ctx, dir), str(title, 200), str(author ?? '', 200))),
   saveLayout: async (ctx, dir, layout) => saveLayout(await bookDir(ctx, dir), layout as LayoutSettings),
   exportPrintPdf: async (ctx, dir, perfil) => {
     const p = perfil === undefined ? 'grafica' : str(perfil, 10)

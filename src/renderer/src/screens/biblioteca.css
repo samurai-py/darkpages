@@ -126,3 +126,7 @@
   .bib-feat { padding: 20px; gap: 22px; }
   .bib-feat-title { font-size: 30px; }
 }
+
+/* renomear livro */
+.bib-renomear-b { margin-left: 12px; font-family: var(--fui, inherit); font-size: 13px; font-weight: 400; vertical-align: middle; }
+.bib-renomear { display: flex; flex-direction: column; gap: 10px; max-width: 460px; }

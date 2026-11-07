@@ -48,6 +48,7 @@ export const folio = {
   saveChapter: (dir: string, file: string, title: string, body: string) =>
     call<SaveResult>('saveChapter', dir, file, title, body),
   addChapter: (dir: string, title: string, kind?: 'capitulo' | 'parte') => call<Project>('addChapter', dir, title, kind),
+  saveMeta: (dir: string, title: string, author: string) => call<Project>('saveMeta', dir, title, author),
   saveLayout: (dir: string, layout: LayoutSettings) => call<Project>('saveLayout', dir, layout),
   exportPrintPdf: (dir: string, perfil: PerfilPdf = 'grafica') => call<ExportResult>('exportPrintPdf', dir, perfil),
   revealFile: (path: string) => openExport(path),
