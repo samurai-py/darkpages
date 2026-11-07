@@ -90,6 +90,13 @@ export function Toolbar(p: Props): ReactElement {
     }
   }
 
+  const inserirRef = useRef<HTMLDetailsElement>(null)
+  /** Executa a ação do menu Inserir e fecha o menu. */
+  const fecharInserir = (fn: () => void): void => {
+    inserirRef.current?.removeAttribute('open')
+    fn()
+  }
+
   const inserirNota = (): void => {
     if (!e) return
     e.chain().focus().insertContent({ type: 'nota', attrs: { texto: '' } }).run()
@@ -99,210 +106,221 @@ export function Toolbar(p: Props): ReactElement {
 
   return (
     <div className="ms-toolbar-wrap">
-      <div className="ms-toolbar" role="toolbar" aria-label="Formatação e visualização">
-        <span className="ms-step" title="Corpo do texto na tela (px)">
-          <span className="ms-step-l">Corpo</span>
-          <button type="button" className="ms-ib" aria-label="Diminuir corpo" onClick={() => passo('corpoPx', -1)}>
-            <Ico n="menos" size={13} />
+      <div className="ms-toolbar" role="toolbar" aria-label="Escrever, revisar e ver">
+        {/* ---- escrever ---- */}
+        <div className="ms-tg" role="group" aria-label="Escrever">
+          <button
+            type="button"
+            className="ms-chip ms-sq ms-i"
+            aria-label="Itálico (Ctrl+I)"
+            title="Itálico (Ctrl+I)"
+            aria-pressed={!!e?.isActive('italic')}
+            disabled={!e}
+            onClick={() => e?.chain().focus().toggleItalic().run()}
+          >
+            I
           </button>
-          <b aria-live="polite">{p.visual.corpoPx}</b>
-          <button type="button" className="ms-ib" aria-label="Aumentar corpo" onClick={() => passo('corpoPx', 1)}>
-            <Ico n="mais" size={13} />
+          <button
+            type="button"
+            className="ms-chip ms-sq ms-b"
+            aria-label="Negrito (Ctrl+B)"
+            title="Negrito (Ctrl+B)"
+            aria-pressed={!!e?.isActive('bold')}
+            disabled={!e}
+            onClick={() => e?.chain().focus().toggleBold().run()}
+          >
+            N
           </button>
-        </span>
-        <span className="ms-step" title="Entrelinha na tela">
-          <span className="ms-step-l">Linha</span>
-          <button type="button" className="ms-ib" aria-label="Diminuir entrelinha" onClick={() => passo('linha', -0.05)}>
-            <Ico n="menos" size={13} />
+          <button
+            type="button"
+            className="ms-chip ms-lbl2"
+            disabled={!e}
+            title="Nova fala com travessão (Ctrl+Enter). Ou digite - e espaço no início do parágrafo."
+            onClick={() => e && novaFala(e)}
+          >
+            <Ico n="fala" size={14} />
+            Fala
           </button>
-          <b aria-live="polite">{p.visual.linha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b>
-          <button type="button" className="ms-ib" aria-label="Aumentar entrelinha" onClick={() => passo('linha', 0.05)}>
-            <Ico n="mais" size={13} />
+          <button
+            type="button"
+            className="ms-chip ms-lbl2"
+            aria-pressed={!!e?.isActive('blockquote')}
+            disabled={!e}
+            title="Citação: bloco recuado para cartas, epígrafes, trechos lidos (Ctrl+Shift+B)"
+            onClick={() => e?.chain().focus().toggleBlockquote().run()}
+          >
+            <Ico n="citacao" size={14} />
+            Citação
           </button>
-        </span>
+          <details className="ms-atalhos ms-ins" ref={inserirRef}>
+            <summary className="ms-chip ms-lbl1" title="Inserir no texto">
+              <Ico n="inserir" size={14} />
+              Inserir
+              <Ico n="descer" size={12} />
+            </summary>
+            <div className="ms-atalhos-pop ms-ins-pop" role="menu" aria-label="Inserir no texto">
+              <button type="button" role="menuitem" className="ms-mi" disabled={!e} onClick={() => fecharInserir(() => e && inserirCena(e))}>
+                <Ico n="cena" size={15} />
+                <span><b>Quebra de cena</b><small>⁂ · Ctrl+Shift+Enter ou *** e espaço</small></span>
+              </button>
+              <button type="button" role="menuitem" className="ms-mi" disabled={!e} onClick={() => fecharInserir(inserirNota)}>
+                <Ico n="nota" size={15} />
+                <span><b>Nota de rodapé</b><small>Sai no pé da página do PDF</small></span>
+              </button>
+              <button type="button" role="menuitem" className="ms-mi" disabled={!e} onClick={() => fecharInserir(() => e && inserirQuebraPagina(e))}>
+                <Ico n="pagina" size={15} />
+                <span><b>Quebra de página</b><small>O que vem depois começa numa página nova</small></span>
+              </button>
+              <button type="button" role="menuitem" className="ms-mi" disabled={!e || !dirLivro} onClick={() => fecharInserir(() => arquivo.current?.click())}>
+                <Ico n="imagem" size={15} />
+                <span><b>Imagem com legenda</b><small>PNG ou JPEG; 300 dpi para impressão</small></span>
+              </button>
+            </div>
+          </details>
+          <input
+            ref={arquivo}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="ms-sr"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(ev) => {
+              const f = ev.target.files?.[0]
+              ev.target.value = ''
+              if (f) void enviarImagem(f)
+            }}
+          />
+        </div>
+
         <span className="ms-sep" />
-        <button
-          type="button"
-          className="ms-chip ms-i"
-          aria-label="Itálico (Ctrl+I)"
-          aria-pressed={!!e?.isActive('italic')}
-          disabled={!e}
-          onClick={() => e?.chain().focus().toggleItalic().run()}
-        >
-          I
-        </button>
-        <button
-          type="button"
-          className="ms-chip ms-b"
-          aria-label="Negrito (Ctrl+B)"
-          aria-pressed={!!e?.isActive('bold')}
-          disabled={!e}
-          onClick={() => e?.chain().focus().toggleBold().run()}
-        >
-          N
-        </button>
-        <button
-          type="button"
-          className="ms-chip"
-          aria-label="Inserir quebra de cena"
-          title="Quebra de cena (Ctrl+Shift+Enter, ou digite *** e espaço)"
-          disabled={!e}
-          onClick={() => e && inserirCena(e)}
-        >
-          ⁂
-        </button>
-        <button
-          type="button"
-          className="ms-chip"
-          aria-label="Inserir quebra de página"
-          title="Quebra de página: o texto seguinte começa numa página nova no PDF, no EPUB e no DOCX"
-          disabled={!e}
-          onClick={() => e && inserirQuebraPagina(e)}
-        >
-          ⤓ Página
-        </button>
-        <button
-          type="button"
-          className="ms-chip"
-          disabled={!e || !dirLivro}
-          title="Imagem com legenda (PNG ou JPEG; para impressão, 300 dpi na largura do texto)"
-          onClick={() => arquivo.current?.click()}
-        >
-          ▣ Imagem
-        </button>
-        <input
-          ref={arquivo}
-          type="file"
-          accept="image/png,image/jpeg"
-          className="ms-sr"
-          tabIndex={-1}
-          aria-hidden="true"
-          onChange={(ev) => {
-            const f = ev.target.files?.[0]
-            ev.target.value = ''
-            if (f) void enviarImagem(f)
-          }}
-        />
-        {imgErro && (
-          <span className="err" role="alert" style={{ margin: 0, fontSize: 12 }}>
-            {imgErro}
-          </span>
-        )}
-        <button
-          type="button"
-          className="ms-chip"
-          disabled={!e}
-          title="Nova fala com travessão (Ctrl+Enter). Ou digite - e espaço no início do parágrafo."
-          onClick={() => e && novaFala(e)}
-        >
-          — Fala
-        </button>
-        <button
-          type="button"
-          className="ms-chip"
-          aria-pressed={!!e?.isActive('blockquote')}
-          disabled={!e}
-          title="Citação: bloco recuado para cartas, epígrafes, trechos lidos (Ctrl+Shift+B)"
-          onClick={() => e?.chain().focus().toggleBlockquote().run()}
-        >
-          “ Citação
-        </button>
-        <details className="ms-atalhos">
-          <summary className="ms-chip" title="Atalhos de escrita">Atalhos</summary>
-          <div className="ms-atalhos-pop" role="dialog" aria-label="Atalhos de escrita">
-            <dl>
-              {ATALHOS.map((a) => (
-                <div key={a.teclas}>
-                  <dt>{a.teclas}</dt>
-                  <dd>{a.acao}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </details>
-        <details className="ms-atalhos ms-tela">
-          <summary className="ms-chip" title="Opções de tela (só neste navegador)">Tela</summary>
-          <div className="ms-atalhos-pop" role="group" aria-label="Opções de tela">
-            {(
-              [
-                ['justificar', 'Justificar enquanto escrevo', 'Texto justificado e com hifenização'],
-                ['maquina', 'Máquina de escrever', 'A linha do cursor fica no meio da tela'],
-                ['focoParagrafo', 'Foco no parágrafo', 'Os outros parágrafos ficam esmaecidos']
-              ] as Array<[keyof Tela, string, string]>
-            ).map(([k, rot, dica]) => (
-              <label key={k} className="ms-tela-op">
-                <input type="checkbox" checked={p.tela[k]} onChange={(ev) => p.onTela({ [k]: ev.target.checked })} />
-                <span>
-                  <b>{rot}</b>
-                  <small>{dica}</small>
+
+        {/* ---- revisar ---- */}
+        <div className="ms-tg" role="group" aria-label="Revisar">
+          <button type="button" className="ms-chip ms-lbl2" aria-pressed={p.buscaAberta} onClick={() => p.onBusca(!p.buscaAberta)} title="Buscar (Ctrl+F)">
+            <Ico n="busca" size={14} />
+            Buscar
+          </button>
+          <button
+            type="button"
+            className="ms-chip ms-lbl2"
+            aria-pressed={p.repeticoes}
+            onClick={() => p.onRepeticoes(!p.repeticoes)}
+            title="Destacar as palavras mais repetidas do capítulo"
+          >
+            <Ico n="eco" size={14} />
+            Repetições
+          </button>
+          {p.onVersoes && (
+            <button type="button" className="ms-chip ms-lbl2" onClick={p.onVersoes} title="Versões guardadas deste capítulo: comparar e restaurar">
+              <Ico n="versoes" size={14} />
+              Versões
+            </button>
+          )}
+        </div>
+
+        <span className="ms-sep" />
+
+        {/* ---- ver ---- */}
+        <div className="ms-tg" role="group" aria-label="Ver">
+          <details className="ms-atalhos ms-tela">
+            <summary className="ms-chip ms-lbl1" title="Tamanho do texto e modos de tela (só neste navegador)">
+              <Ico n="texto" size={15} />
+              Tela
+              <Ico n="descer" size={12} />
+            </summary>
+            <div className="ms-atalhos-pop" role="group" aria-label="Opções de tela">
+              <div className="ms-tela-steps">
+                <span className="ms-step" title="Corpo do texto na tela (px)">
+                  <span className="ms-step-l">Corpo</span>
+                  <button type="button" className="ms-ib" aria-label="Diminuir corpo" onClick={() => passo('corpoPx', -1)}>
+                    <Ico n="menos" size={13} />
+                  </button>
+                  <b aria-live="polite">{p.visual.corpoPx}</b>
+                  <button type="button" className="ms-ib" aria-label="Aumentar corpo" onClick={() => passo('corpoPx', 1)}>
+                    <Ico n="mais" size={13} />
+                  </button>
                 </span>
-              </label>
-            ))}
-          </div>
-        </details>
-        <button type="button" className="ms-chip" disabled={!e} onClick={inserirNota} title="Nota de rodapé">
-          <Ico n="nota" size={14} />
-          Nota
-        </button>
-        {p.onVersoes && (
-          <button type="button" className="ms-chip" onClick={p.onVersoes} title="Versões guardadas deste capítulo: comparar e restaurar">
-            <Ico n="versoes" size={14} />
-            Versões
-          </button>
-        )}
-        <span className="ms-sep" />
-        <button type="button" className="ms-chip" aria-pressed={p.buscaAberta} onClick={() => p.onBusca(!p.buscaAberta)} title="Buscar (Ctrl+F)">
-          <Ico n="busca" size={14} />
-          Buscar
-        </button>
-        <button
-          type="button"
-          className="ms-chip"
-          aria-pressed={p.repeticoes}
-          onClick={() => p.onRepeticoes(!p.repeticoes)}
-          title="Destacar as palavras mais repetidas do capítulo"
-        >
-          <Ico n="eco" size={14} />
-          Repetições
-        </button>
-        {p.foco ? (
-          <>
-            <button
-              type="button"
-              className="ms-chip ms-foco on"
-              onClick={p.onAmpulheta}
-              aria-label={p.restante === null ? `Iniciar ampulheta de ${p.focoMin} minutos` : 'Parar ampulheta'}
-            >
-              <Ico n="ampulheta" size={14} />
-              {p.restante === null ? `${p.focoMin}:00` : mmss(p.restante)}
-            </button>
-            <label className="ms-sr" htmlFor="ms-foco-min">
-              Duração da ampulheta
-            </label>
-            <select
-              id="ms-foco-min"
-              className="ms-mini-select"
-              value={p.focoMin}
-              onChange={(ev) => p.onFocoMin(Number(ev.target.value))}
-            >
-              {[15, 25, 45].map((m) => (
-                <option key={m} value={m}>
-                  {m} min
-                </option>
+                <span className="ms-step" title="Entrelinha na tela">
+                  <span className="ms-step-l">Linha</span>
+                  <button type="button" className="ms-ib" aria-label="Diminuir entrelinha" onClick={() => passo('linha', -0.05)}>
+                    <Ico n="menos" size={13} />
+                  </button>
+                  <b aria-live="polite">{p.visual.linha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b>
+                  <button type="button" className="ms-ib" aria-label="Aumentar entrelinha" onClick={() => passo('linha', 0.05)}>
+                    <Ico n="mais" size={13} />
+                  </button>
+                </span>
+              </div>
+              {(
+                [
+                  ['justificar', 'Justificar enquanto escrevo', 'Texto justificado e com hifenização'],
+                  ['maquina', 'Máquina de escrever', 'A linha do cursor fica no meio da tela'],
+                  ['focoParagrafo', 'Foco no parágrafo', 'Os outros parágrafos ficam esmaecidos']
+                ] as Array<[keyof Tela, string, string]>
+              ).map(([k, rot, dica]) => (
+                <label key={k} className="ms-tela-op">
+                  <input type="checkbox" checked={p.tela[k]} onChange={(ev) => p.onTela({ [k]: ev.target.checked })} />
+                  <span>
+                    <b>{rot}</b>
+                    <small>{dica}</small>
+                  </span>
+                </label>
               ))}
-            </select>
-            <button type="button" className="ms-chip" onClick={() => p.onFoco(false)}>
-              <Ico n="sair" size={14} />
-              Sair do foco
+            </div>
+          </details>
+          {p.foco ? (
+            <span className="ms-foco-grp">
+              <button
+                type="button"
+                className="ms-chip ms-foco on"
+                onClick={p.onAmpulheta}
+                aria-label={p.restante === null ? `Iniciar ampulheta de ${p.focoMin} minutos` : 'Parar ampulheta'}
+              >
+                <Ico n="ampulheta" size={14} />
+                {p.restante === null ? `${p.focoMin}:00` : mmss(p.restante)}
+              </button>
+              <label className="ms-sr" htmlFor="ms-foco-min">
+                Duração da ampulheta
+              </label>
+              <select id="ms-foco-min" className="ms-mini-select" value={p.focoMin} onChange={(ev) => p.onFocoMin(Number(ev.target.value))}>
+                {[15, 25, 45].map((m) => (
+                  <option key={m} value={m}>
+                    {m} min
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="ms-chip ms-sq" onClick={() => p.onFoco(false)} aria-label="Sair do foco" title="Sair do foco">
+                <Ico n="sair" size={14} />
+              </button>
+            </span>
+          ) : (
+            <button type="button" className="ms-chip ms-foco ms-lbl1" onClick={() => p.onFoco(true)} title="Tela cheia sem painéis, com ampulheta de escrita">
+              <Ico n="ampulheta" size={14} />
+              Foco
             </button>
-          </>
-        ) : (
-          <button type="button" className="ms-chip ms-foco" onClick={() => p.onFoco(true)} title="Tela cheia sem painéis, com ampulheta">
-            <Ico n="ampulheta" size={14} />
-            Foco · {p.focoMin}:00
-          </button>
-        )}
+          )}
+          <details className="ms-atalhos">
+            <summary className="ms-chip ms-sq" title="Atalhos de escrita" aria-label="Atalhos de escrita">
+              <Ico n="teclado" size={15} />
+            </summary>
+            <div className="ms-atalhos-pop ms-pop-dir" role="dialog" aria-label="Atalhos de escrita">
+              <dl>
+                {ATALHOS.map((a) => (
+                  <div key={a.teclas}>
+                    <dt>{a.teclas}</dt>
+                    <dd>{a.acao}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </details>
+        </div>
       </div>
+      {imgErro && (
+        <span className="err" role="alert" style={{ margin: 0, fontSize: 12 }}>
+          {imgErro}
+        </span>
+      )}
       {p.buscaAberta && <Busca editor={e} onFechar={() => p.onBusca(false)} />}
     </div>
   )

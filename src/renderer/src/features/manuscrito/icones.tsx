@@ -9,6 +9,7 @@ export type IconeMs =
   | 'mais' | 'menos' | 'busca' | 'ampulheta' | 'fechar' | 'subir' | 'descer' | 'menu' | 'arrastar'
   | 'importar' | 'exportar' | 'alerta' | 'lugar' | 'olho' | 'brilho' | 'nota' | 'cena' | 'lixeira'
   | 'lapis' | 'anterior' | 'proximo' | 'sair' | 'imagem' | 'eco' | 'versoes' | 'restaurar'
+  | 'pagina' | 'teclado' | 'texto' | 'inserir' | 'fala' | 'citacao'
 
 const P: Record<IconeMs, ReactElement> = {
   mais: <path d="M12 5v14M5 12h14" />,
@@ -141,6 +142,47 @@ const P: Record<IconeMs, ReactElement> = {
       <path d="M6 4.5h9l3.5 3.5v11.5H6z" {...D} />
       <path d="M6 4.5h9l3.5 3.5v11.5H6zM15 4.5V8h3.5" />
       <path d="M14.5 15.5a3 3 0 1 0-1-4.2M13 9.8l.5 1.6 1.6-.5" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  pagina: (
+    <>
+      <path d="M6 3.5h12v6H6z" {...D} />
+      <path d="M6 9.5v-6h12v6M6 14.5v6h12v-6" />
+      <path d="M3.5 12h2M8 12h2M12 12h2M16 12h2M20.5 12h0" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  teclado: (
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2" {...D} />
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <path d="M6 9.5h.01M9.3 9.5h.01M12.6 9.5h.01M15.9 9.5h.01M18.4 9.5h.01M6 12.3h.01M18.4 12.3h.01" strokeWidth={2} />
+      <path d="M8.5 15h7" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  texto: (
+    <>
+      <path d="M3.5 18.5L8.5 5.5l5 13M5.4 14h6.2" />
+      <path d="M15 12.5a2.6 2.6 0 015.2 0v6M20.2 15.8c-1.2-.9-5.6-1-5.6 1.2 0 1.9 4 1.8 5.6-.4" />
+      <circle cx="8.5" cy="5.5" r="1.1" {...A} />
+    </>
+  ),
+  inserir: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="4" {...D} />
+      <rect x="4" y="4" width="16" height="16" rx="4" />
+      <path d="M12 8.5v7M8.5 12h7" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  fala: (
+    <>
+      <path d="M4 7h7" style={{ stroke: 'var(--acc)' }} strokeWidth={2} />
+      <path d="M13.5 7h6.5M4 12h16M4 17h11" />
+    </>
+  ),
+  citacao: (
+    <>
+      <path d="M5 6.5v11" style={{ stroke: 'var(--acc)' }} strokeWidth={2} />
+      <path d="M9 8h10M9 12h10M9 16h7" />
     </>
   ),
   eco: (
