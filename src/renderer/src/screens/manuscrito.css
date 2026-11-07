@@ -128,7 +128,7 @@
 /* ------------------------------------------------------------ página */
 .ms-page {
   --ms-corpo: 19px; --ms-linha: 1.7;
-  position: relative; width: 100%; max-width: 680px; background: var(--paper); color: var(--paperink); border-radius: 3px;
+  position: relative; width: 100%; max-width: calc(var(--ms-corpo) * 31 + 136px); background: var(--paper); color: var(--paperink); border-radius: 3px;
   padding: 56px 68px 72px; box-shadow: 0 1px 0 var(--line), 0 30px 60px -22px var(--shadow);
   animation: msIn .5s var(--ease) both;
 }
@@ -144,20 +144,25 @@
 
 .ms-texto {
   font-family: var(--fb); font-size: var(--ms-corpo); line-height: var(--ms-linha); color: var(--paperink); outline: none;
-  min-height: 55vh; text-align: justify; hyphens: auto; counter-reset: nota; caret-color: var(--pacc);
+  min-height: 55vh; text-align: left; hyphens: manual; counter-reset: nota; caret-color: var(--pacc);
+  /* medida confortável: ~65–70 caracteres de prosa por linha (60ch ≈ 68 na EB Garamond), coluna centralizada */
+  max-width: 60ch; margin-inline: auto;
 }
+.ms-justificar .ms-texto { text-align: justify; hyphens: auto; }
 .ms-texto p { margin: 0; }
+/* recuo de primeira linha em todo parágrafo, menos o primeiro, o após cena e o após citação */
 .ms-texto p + p { text-indent: 1.5em; }
 .ms-texto h2, .ms-texto h3 { font-family: var(--fd); font-weight: 500; color: var(--pacc); text-align: center; margin: 1.2em 0 .6em; }
 .ms-texto h2 { font-size: 1.35em; }
 .ms-texto h3 { font-size: 1.1em; }
-.ms-texto blockquote { margin: .8em 2em; font-style: italic; }
 .ms-texto ul, .ms-texto ol { margin: .4em 0; padding-left: 1.6em; }
-.ms-texto hr.cena {
-  border: 0; height: auto; margin: 1.1em 0; text-align: center; overflow: visible; cursor: pointer;
+.ms-texto .cena {
+  display: block; width: 100%; box-sizing: border-box; margin: 1.2em 0; padding: 0; text-align: center; text-indent: 0;
+  color: var(--pacc); font-size: 1.15em; line-height: 1; letter-spacing: 0; cursor: pointer; user-select: none;
 }
-.ms-texto hr.cena::after { content: '⁂'; display: block; color: var(--pacc); font-size: 1.1em; line-height: 1; }
-.ms-texto hr.cena.ProseMirror-selectednode { outline: 1px dashed var(--pacc); outline-offset: 4px; }
+.ms-texto .cena.ProseMirror-selectednode { outline: 1px dashed var(--pacc); outline-offset: 6px; border-radius: 4px; }
+/* convenção de livro: parágrafo após quebra de cena ou citação começa sem recuo */
+.ms-texto .cena + p, .ms-texto blockquote + p { text-indent: 0; }
 .ms-texto sup.nota {
   font-family: var(--fu); font-size: .58em; line-height: 0; vertical-align: super; color: var(--pacc); cursor: pointer;
   padding: 0 1px; border-radius: 3px;
@@ -384,3 +389,32 @@
 .ms-rbar-t svg { color: var(--acc); }
 .ms-rbar-e { flex-basis: 100%; font-size: 12px; color: var(--alert); }
 @media (prefers-reduced-motion: reduce) { .ms-rbar { animation: none; } }
+
+/* atalhos de escrita */
+.ms-atalhos { position: relative; }
+.ms-atalhos > summary { list-style: none; cursor: pointer; }
+.ms-atalhos > summary::-webkit-details-marker { display: none; }
+.ms-atalhos-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 340px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--rad) + 2px);
+  padding: 12px 14px; box-shadow: 0 16px 34px -12px var(--shadow);
+}
+.ms-atalhos-pop dl { margin: 0; display: grid; gap: 8px; }
+.ms-atalhos-pop dl > div { display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 12.5px; }
+.ms-atalhos-pop dt { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ms-atalhos-pop dd { margin: 0; color: var(--muted); }
+/* citação dentro do texto */
+.ms-texto blockquote { margin: .6em 2em; padding: 0; font-style: italic; color: var(--paperink); opacity: .9; }
+.ms-texto blockquote p + p { text-indent: 0; margin-top: .4em; }
+
+/* opções de tela */
+.ms-maquina .ms-texto { padding-bottom: 45vh; }
+.ms-focopar .ms-texto > * { transition: opacity .25s var(--ease); }
+.ms-focopar .ms-texto:focus-within > *:not(.ms-atual) { opacity: .32; }
+.ms-digitando .ms-texto .rep { background: none; box-shadow: none; }
+.ms-digitando .ms-texto .furo { text-decoration: none; }
+.ms-tela .ms-atalhos-pop { display: grid; gap: 10px; min-width: 280px; }
+.ms-tela-op { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+.ms-tela-op input { margin-top: 3px; accent-color: var(--acc); }
+.ms-tela-op b { display: block; color: var(--text); font-weight: 600; }
+.ms-tela-op small { display: block; color: var(--muted); font-size: 12px; }

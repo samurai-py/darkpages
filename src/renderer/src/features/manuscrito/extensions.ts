@@ -1,5 +1,6 @@
-import { Extension, Node, mergeAttributes, nodeInputRule } from '@tiptap/core'
-import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
+import { Extension, InputRule, Node, mergeAttributes, type Editor } from '@tiptap/core'
+import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state'
+import type { Schema } from '@tiptap/pm/model'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { WORD_RE, foldSameLength, radical } from './texto'
@@ -140,13 +141,21 @@ export const Cena = Node.create({
   atom: true,
   selectable: true,
   parseHTML() {
-    return [{ tag: 'hr' }]
+    return [{ tag: 'hr' }, { tag: 'div[data-cena]' }]
   },
   renderHTML() {
-    return ['hr', { class: 'cena', 'aria-label': 'Quebra de cena' }]
+    return ['div', { class: 'cena', 'data-cena': '', role: 'separator', 'aria-label': 'Quebra de cena', contenteditable: 'false' }, '⁂']
   },
   addInputRules() {
-    return [nodeInputRule({ find: /^(?:\*\*\*|⁂|\* \* \*)\s$/, type: this.type })]
+    return [
+      new InputRule({
+        find: /^(?:\*\*\*|⁂|\* \* \*)\s$/,
+        handler: ({ state, range }) => {
+          state.tr.delete(range.from, range.to)
+          trCena(state.tr, state.schema)
+        }
+      })
+    ]
   },
   addStorage() {
     return {
@@ -158,6 +167,69 @@ export const Cena = Node.create({
         parse: {}
       }
     }
+  }
+})
+
+/**
+ * Insere a quebra de cena no cursor e deixa o cursor num parágrafo logo abaixo:
+ * parágrafo vazio vira cena + parágrafo; no fim do parágrafo, cena + parágrafo
+ * novo depois dele; no início, a cena entra antes; no meio, o parágrafo é partido.
+ */
+export function trCena(tr: Transaction, schema: Schema): boolean {
+  const cena = schema.nodes.cena
+  const par = schema.nodes.paragraph
+  if (!cena || !par) return false
+  if (!tr.selection.empty) tr.deleteSelection()
+  const $p = tr.selection.$from
+  if (!$p.parent.isTextblock) return false
+  const d = $p.depth
+  const pos = $p.pos
+  if ($p.parent.content.size === 0) {
+    const ini = $p.before(d)
+    tr.replaceWith(ini, $p.after(d), [cena.create(), par.create()])
+    tr.setSelection(TextSelection.create(tr.doc, ini + 2))
+  } else if ($p.parentOffset === $p.parent.content.size) {
+    const depois = $p.after(d)
+    tr.insert(depois, [cena.create(), par.create()])
+    tr.setSelection(TextSelection.create(tr.doc, depois + 2))
+  } else if ($p.parentOffset === 0) {
+    tr.insert($p.before(d), cena.create())
+    tr.setSelection(TextSelection.create(tr.doc, pos + 1))
+  } else {
+    tr.split(pos)
+    tr.insert(pos + 1, cena.create())
+    tr.setSelection(TextSelection.create(tr.doc, pos + 3))
+  }
+  return true
+}
+
+export function inserirCena(editor: Editor): boolean {
+  const tr = editor.state.tr
+  if (!trCena(tr, editor.state.schema)) return false
+  editor.view.dispatch(tr.scrollIntoView())
+  editor.view.focus()
+  return true
+}
+
+/** Marca o bloco do cursor (para o modo "foco no parágrafo"). */
+export const BlocoAtual = Extension.create({
+  name: 'folioBlocoAtual',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('folioBlocoAtual'),
+        props: {
+          decorations: (state: EditorState) => {
+            const $p = state.selection.$from
+            if ($p.depth < 1) return DecorationSet.empty
+            const ini = $p.before(1)
+            const node = state.doc.nodeAt(ini)
+            if (!node) return DecorationSet.empty
+            return DecorationSet.create(state.doc, [Decoration.node(ini, ini + node.nodeSize, { class: 'ms-atual' })])
+          }
+        }
+      })
+    ]
   }
 })
 

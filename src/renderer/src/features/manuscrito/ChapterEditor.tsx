@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { EscritaLiteraria, corrigirMarkdownLegado, limparHtmlColado, limparTextoColado } from './escrita'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Markdown } from 'tiptap-markdown'
 import type { EditorView } from '@tiptap/pm/view'
 import { call } from '../../api'
 import type { SinonimosResult } from '../../../../shared/models'
-import { Cena, Marcas, Nota, marcasKey, type Furo } from './extensions'
+import { BlocoAtual, Cena, Marcas, Nota, marcasKey, type Furo } from './extensions'
 import { analisarRepeticoes, contarRadical, fmt, manterCaixa, type Repeticao } from './texto'
 import { Ico } from './icones'
 import { RascunhoIa, docSemRascunho, markdownSemRascunho, temRascunho } from './rascunho'
 
 /** Rascunho da IA mostrado no editor (ver rascunho.ts). */
+/** Preferências de tela (por usuário, fora do arquivo do livro). */
+export interface Tela {
+  justificar: boolean
+  maquina: boolean
+  focoParagrafo: boolean
+}
+
 export interface RascunhoUI {
   id: string
   carregando: boolean
@@ -31,6 +39,7 @@ interface Props {
   furos: Furo[]
   corpoPx: number
   linha: number
+  tela: Tela
   rascunho: RascunhoUI | null
   onAceitar: () => void
   onRefazer: () => void
@@ -117,16 +126,21 @@ export function ChapterEditor(p: Props): ReactElement {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ horizontalRule: false, codeBlock: false, code: false, heading: { levels: [2, 3] } }),
+      StarterKit.configure({ horizontalRule: false, codeBlock: false, code: false, heading: false, bulletList: false, orderedList: false, listItem: false }),
+      EscritaLiteraria,
       Placeholder.configure({ placeholder: 'Comece a escrever…' }),
       Markdown.configure({ html: false, tightLists: true, linkify: false, breaks: false, transformPastedText: true }),
       Nota,
       Cena,
       Marcas,
+      BlocoAtual,
       RascunhoIa
     ],
-    content: p.inicial,
+    content: corrigirMarkdownLegado(p.inicial),
     editorProps: {
+      // colar: só parágrafos, itálico e negrito, com a tipografia do livro
+      transformPastedHTML: (html) => limparHtmlColado(html),
+      transformPastedText: (text, plain) => limparTextoColado(text, plain),
       attributes: { class: 'ms-texto', 'aria-label': 'Texto do capítulo', spellcheck: 'true', lang: 'pt-BR', role: 'textbox', 'aria-multiline': 'true' },
       handleClickOn: (view, _pos, node, nodePos) => {
         if (node.type.name === 'nota') {
@@ -177,6 +191,55 @@ export function ChapterEditor(p: Props): ReactElement {
     return () => p.onEditor(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
+
+  // enquanto digita, repetições e furos somem; voltam ~2 s após a pausa
+  useEffect(() => {
+    if (!editor) return
+    let t: ReturnType<typeof setTimeout> | undefined
+    const digitando = (): void => {
+      pagina.current?.classList.add('ms-digitando')
+      clearTimeout(t)
+      t = setTimeout(() => pagina.current?.classList.remove('ms-digitando'), 2000)
+    }
+    editor.on('update', digitando)
+    return () => {
+      clearTimeout(t)
+      editor.off('update', digitando)
+    }
+  }, [editor])
+
+  // máquina de escrever: mantém a linha do cursor no meio da tela
+  const maquina = p.tela.maquina
+  useEffect(() => {
+    if (!editor || !maquina) return
+    const centrar = (): void => {
+      if (!editor.isFocused) return
+      const scroller = pagina.current?.closest<HTMLElement>('.ms-scroll')
+      if (!scroller) return
+      let y: number
+      try {
+        const c = editor.view.coordsAtPos(editor.state.selection.head)
+        y = (c.top + c.bottom) / 2
+      } catch {
+        return
+      }
+      const r = scroller.getBoundingClientRect()
+      const delta = y - (r.top + r.height / 2)
+      if (Math.abs(delta) > 2) scroller.scrollBy({ top: delta })
+    }
+    const agendar = (): void => {
+      requestAnimationFrame(centrar)
+    }
+    editor.on('selectionUpdate', agendar)
+    editor.on('update', agendar)
+    editor.on('focus', agendar)
+    agendar()
+    return () => {
+      editor.off('selectionUpdate', agendar)
+      editor.off('update', agendar)
+      editor.off('focus', agendar)
+    }
+  }, [editor, maquina])
 
   // palavras repetidas: reanalisa com atraso após digitar
   const [versao, setVersao] = useState(0)
@@ -278,7 +341,9 @@ export function ChapterEditor(p: Props): ReactElement {
   return (
     <article
       ref={pagina}
-      className="ms-page"
+      className={['ms-page', p.tela.justificar && 'ms-justificar', p.tela.maquina && 'ms-maquina', p.tela.focoParagrafo && 'ms-focopar']
+        .filter(Boolean)
+        .join(' ')}
       style={{ ['--ms-corpo' as string]: `${p.corpoPx}px`, ['--ms-linha' as string]: String(p.linha) }}
     >
       <header className="ms-cab">

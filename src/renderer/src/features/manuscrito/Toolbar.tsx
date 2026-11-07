@@ -1,6 +1,8 @@
+import { ATALHOS, novaFala } from './escrita'
+import type { Tela } from './ChapterEditor'
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
 import type { Editor } from '@tiptap/react'
-import { marcasKey } from './extensions'
+import { inserirCena, marcasKey } from './extensions'
 import { Ico } from './icones'
 
 export interface Visual {
@@ -12,6 +14,8 @@ interface Props {
   editor: Editor | null
   visual: Visual
   onVisual: (v: Visual) => void
+  tela: Tela
+  onTela: (t: Partial<Tela>) => void
   repeticoes: boolean
   onRepeticoes: (v: boolean) => void
   buscaAberta: boolean
@@ -107,12 +111,64 @@ export function Toolbar(p: Props): ReactElement {
           type="button"
           className="ms-chip"
           aria-label="Inserir quebra de cena"
-          title="Quebra de cena (ou digite *** e espaço)"
+          title="Quebra de cena (Ctrl+Shift+Enter, ou digite *** e espaço)"
           disabled={!e}
-          onClick={() => e?.chain().focus().insertContent({ type: 'cena' }).run()}
+          onClick={() => e && inserirCena(e)}
         >
           ⁂
         </button>
+        <button
+          type="button"
+          className="ms-chip"
+          disabled={!e}
+          title="Nova fala com travessão (Ctrl+Enter). Ou digite - e espaço no início do parágrafo."
+          onClick={() => e && novaFala(e)}
+        >
+          — Fala
+        </button>
+        <button
+          type="button"
+          className="ms-chip"
+          aria-pressed={!!e?.isActive('blockquote')}
+          disabled={!e}
+          title="Citação: bloco recuado para cartas, epígrafes, trechos lidos (Ctrl+Shift+B)"
+          onClick={() => e?.chain().focus().toggleBlockquote().run()}
+        >
+          “ Citação
+        </button>
+        <details className="ms-atalhos">
+          <summary className="ms-chip" title="Atalhos de escrita">Atalhos</summary>
+          <div className="ms-atalhos-pop" role="dialog" aria-label="Atalhos de escrita">
+            <dl>
+              {ATALHOS.map((a) => (
+                <div key={a.teclas}>
+                  <dt>{a.teclas}</dt>
+                  <dd>{a.acao}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </details>
+        <details className="ms-atalhos ms-tela">
+          <summary className="ms-chip" title="Opções de tela (só neste navegador)">Tela</summary>
+          <div className="ms-atalhos-pop" role="group" aria-label="Opções de tela">
+            {(
+              [
+                ['justificar', 'Justificar enquanto escrevo', 'Texto justificado e com hifenização'],
+                ['maquina', 'Máquina de escrever', 'A linha do cursor fica no meio da tela'],
+                ['focoParagrafo', 'Foco no parágrafo', 'Os outros parágrafos ficam esmaecidos']
+              ] as Array<[keyof Tela, string, string]>
+            ).map(([k, rot, dica]) => (
+              <label key={k} className="ms-tela-op">
+                <input type="checkbox" checked={p.tela[k]} onChange={(ev) => p.onTela({ [k]: ev.target.checked })} />
+                <span>
+                  <b>{rot}</b>
+                  <small>{dica}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </details>
         <button type="button" className="ms-chip" disabled={!e} onClick={inserirNota} title="Nota de rodapé">
           <Ico n="nota" size={14} />
           Nota

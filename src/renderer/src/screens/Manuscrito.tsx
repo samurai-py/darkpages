@@ -6,7 +6,7 @@ import { countWords, type ChapterContent, type ChapterKind, type Project } from 
 import type { CenaMeta, Conflito, Ficha, Insight, ProativoEstado } from '../../../shared/models'
 import { ia } from '../features/ia/api'
 import { aceitarRascunho, descartarRascunho, guardaRascunho, inserirRascunho, pontoDeInsercao, type PontoInsercao } from '../features/manuscrito/rascunho'
-import type { RascunhoUI } from '../features/manuscrito/ChapterEditor'
+import type { RascunhoUI, Tela } from '../features/manuscrito/ChapterEditor'
 import { insightsStore, useInsights } from '../features/insights/store'
 import { ponte } from '../features/insights/ponte'
 import { Icon } from '../icons'
@@ -45,7 +45,15 @@ type Toast =
   | { id: string; tipo: 'info' | 'erro'; titulo: string; texto: string }
 
 const VISUAL_KEY = 'folio.manuscrito.visual'
-const VISUAL_PADRAO: Visual & { repeticoes: boolean; focoMin: number } = { corpoPx: 19, linha: 1.7, repeticoes: true, focoMin: 25 }
+const VISUAL_PADRAO: Visual & Tela & { repeticoes: boolean; focoMin: number } = {
+  corpoPx: 19,
+  linha: 1.7,
+  repeticoes: true,
+  focoMin: 25,
+  justificar: false,
+  maquina: false,
+  focoParagrafo: false
+}
 const METAS_PADRAO: Metas = { metaCapitulo: 3000, metaLivro: 80000 }
 
 function lerVisual(): typeof VISUAL_PADRAO {
@@ -656,6 +664,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
             editor={editor}
             visual={visual}
             onVisual={(v) => setVisual(v)}
+            tela={{ justificar: visual.justificar, maquina: visual.maquina, focoParagrafo: visual.focoParagrafo }}
+            onTela={(t) => setVisual(t)}
             repeticoes={visual.repeticoes}
             onRepeticoes={(r) => setVisual({ repeticoes: r })}
             buscaAberta={busca}
@@ -687,6 +697,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
               furos={furos}
               corpoPx={visual.corpoPx}
               linha={visual.linha}
+              tela={{ justificar: visual.justificar, maquina: visual.maquina, focoParagrafo: visual.focoParagrafo }}
               rascunho={rascunho && rascunho.file === chapter.file ? rascunho : null}
               onAceitar={aceitar}
               onRefazer={() => void refazer()}
