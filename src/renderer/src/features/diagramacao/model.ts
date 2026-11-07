@@ -1,4 +1,4 @@
-import { resolveRotulo } from '../../../../shared/rotulo'
+import { resolveRotulo, resolveRotuloParte } from '../../../../shared/rotulo'
 import {
   DEFAULT_LAYOUT,
   type CoverSettings,
@@ -31,6 +31,8 @@ export function withDefaults(l: LayoutSettings): FullLayout {
     paper: { ...D.paper, ...l.paper },
     chapters: l.chapters ?? {},
     rotulo: resolveRotulo(l),
+    rotuloParte: resolveRotuloParte(l),
+    reiniciarNumeracao: l.reiniciarNumeracao === true,
     front: { ...D.front, ...(l.front ?? {}) },
     cover: { ...D.cover, ...(l.cover ?? {}) }
   } as FullLayout

@@ -7,7 +7,7 @@ import type { ChapterContent, EpigrafeCap } from '../../shared/types'
 import { aberturaPath, capaFrentePath, imageKind, mediaType, type ImageKind } from './assets'
 import { isbnToEan } from './cover'
 import { chapterLabelText, numberChapters, showsTitle } from './labels'
-import { rotuloTela } from '../../shared/rotulo'
+import { dentroDeParte, rotuloTela } from '../../shared/rotulo'
 import { assetName, parseBody, parseInline, type Block, type Inline } from './markdown'
 import { chapterDropCap, resolveLayout, type FullLayout } from './settings'
 
@@ -233,9 +233,9 @@ const SCENE_TEXT: Record<string, string> = {
 }
 
 function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, art: string | null, imgs: ImgSink): { xhtml: string; notes: number; heading: string } {
-  const label = chapterLabelText(c.kind, n, l.rotulo)
+  const label = chapterLabelText(c.kind, n, l.rotulo, l.rotuloParte)
   const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
-  const tela = rotuloTela(c.kind, n, l.rotulo)
+  const tela = rotuloTela(c.kind, n, l.rotulo, l.rotuloParte)
   const navTitle = tela && showsTitle(c, tela) ? `${tela}: ${title}` : title
   const prefix = `c${idx}-`
   const sink: NoteSink = { notes: [], prefix }
@@ -245,6 +245,20 @@ function chapterXhtml(c: ChapterContent, n: number, idx: number, l: FullLayout, 
   const epi = epigrafeXhtml(c.epigrafe, sink)
   const texto = blocksXhtml(blocks, sink, imgs, scene, drop)
   const notes = notesSection(sink)
+  if (c.kind === 'parte') {
+    // página de parte: rótulo, título e o texto curto, centrados; sem capitular
+    const corpoParte = blocksXhtml(blocks, sink, imgs, scene, false)
+    const bodyParte = `<section class="parte" epub:type="part" role="doc-part" aria-labelledby="titulo">
+<header class="abertura-parte">
+${label && showsTitle(c, label) ? `<p class="rotulo${l.rotulo.caixa === 'versalete' ? ' versalete' : ''}">${esc(label)}</p>` : ''}
+<h1 id="titulo">${esc(title)}</h1>
+</header>
+${epi}
+${corpoParte ? `<div class="texto-parte">${corpoParte}</div>` : ''}
+${notes}
+</section>`
+    return { xhtml: page(title, bodyParte, 'bodymatter'), notes: sink.notes.length, heading: navTitle }
+  }
   const type = c.kind === 'prologo' ? 'prologue' : c.kind === 'epilogo' ? 'epilogue' : 'chapter'
   const role = c.kind === 'prologo' ? 'doc-prologue' : c.kind === 'epilogo' ? 'doc-epilogue' : 'doc-chapter'
   const body = `<section epub:type="${type}" role="${role}" aria-labelledby="titulo">
@@ -309,6 +323,14 @@ figure.figura figcaption, .legenda-solta { text-indent: 0; text-align: center; f
 nav#toc ol { list-style: none; padding: 0; }
 nav#toc li { margin: 0.4em 0; }
 nav#toc a { text-decoration: none; }
+.parte { text-align: center; }
+.abertura-parte { margin-top: 30%; page-break-before: always; break-before: page; }
+.abertura-parte h1 { font-size: 2.1em; margin-bottom: 1em; }
+.parte .texto-parte { margin: 2em 10% 0; font-style: italic; }
+.parte .texto-parte p { text-indent: 0; text-align: center; }
+.parte .epigrafe-cap { margin: 2em 15% 0; text-align: left; }
+nav#toc ol ol { padding-left: 1.4em; }
+nav#toc li.parte > a { font-style: italic; }
 .capa { margin: 0; padding: 0; text-align: center; }
 .capa img { max-width: 100%; max-height: 100vh; }
 `
@@ -323,8 +345,48 @@ interface SpineItem {
   href: string
   title: string
   inToc: boolean
+  /** 'parte' = abre um nível no sumário; 'filho' = capítulo dentro da parte anterior */
+  nivel?: 'parte' | 'filho'
   linear?: boolean
   props?: string
+}
+
+interface NoToc {
+  item: SpineItem
+  filhos: SpineItem[]
+}
+
+/** Sumário em árvore: cada parte leva os capítulos que vêm depois dela (até a próxima parte). */
+function tocArvore(items: SpineItem[]): NoToc[] {
+  const out: NoToc[] = []
+  let parte: NoToc | null = null
+  for (const it of items) {
+    if (it.nivel === 'filho' && parte) {
+      parte.filhos.push(it)
+      continue
+    }
+    const no: NoToc = { item: it, filhos: [] }
+    out.push(no)
+    parte = it.nivel === 'parte' ? no : null
+  }
+  return out
+}
+
+function navLi(n: NoToc): string {
+  const a = `<a href="${n.item.href}">${esc(n.item.title)}</a>`
+  if (n.item.nivel !== 'parte') return `<li>${a}</li>`
+  const sub = n.filhos.length ? `\n<ol>\n${n.filhos.map((f) => `<li><a href="${f.href}">${esc(f.title)}</a></li>`).join('\n')}\n</ol>\n` : ''
+  return `<li class="parte">${a}${sub}</li>`
+}
+
+/** navMap do toc.ncx (EPUB 2): partes com os capítulos aninhados; playOrder segue a leitura. */
+function ncxPoints(arvore: NoToc[]): string {
+  let ordem = 0
+  const ponto = (s: SpineItem, filhos: () => string): string => {
+    const k = (ordem += 1)
+    return `<navPoint id="np${k}" playOrder="${k}"><navLabel><text>${esc(s.title)}</text></navLabel><content src="${s.href}"/>${filhos()}</navPoint>`
+  }
+  return arvore.map((n) => ponto(n.item, () => n.filhos.map((f) => ponto(f, () => '')).join(''))).join('\n')
 }
 
 export async function exportEpub(dir: string, resourcesDir?: string): Promise<EpubResult> {
@@ -333,7 +395,8 @@ export async function exportEpub(dir: string, resourcesDir?: string): Promise<Ep
   const l = resolveLayout(meta.layout)
   const f = l.front
   const chapters = await Promise.all(project.chapters.map((c) => readChapter(dir, c.file)))
-  const nums = numberChapters(chapters)
+  const nums = numberChapters(chapters, l.reiniciarNumeracao)
+  const emParte = dentroDeParte(chapters)
   const zip = new JSZip()
   zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' })
   zip.file(
@@ -480,7 +543,8 @@ ${f.editora.trim() ? `<p class="editora">${esc(f.editora.trim())}</p>` : ''}
     }
     const r = chapterXhtml(c, nums[i] ?? 0, i + 1, l, art, imgs)
     notes += r.notes
-    xhtml({ id: `cap-${i + 1}`, href: `cap-${String(i + 1).padStart(3, '0')}.xhtml`, title: r.heading, inToc: true }, r.xhtml)
+    const nivel = c.kind === 'parte' ? 'parte' : emParte[i] ? 'filho' : undefined
+    xhtml({ id: `cap-${i + 1}`, href: `cap-${String(i + 1).padStart(3, '0')}.xhtml`, title: r.heading, inToc: true, ...(nivel ? { nivel } : {}) }, r.xhtml)
   }
 
   // páginas finais: posfácio, agradecimentos, sobre o autor (entram no sumário)
@@ -531,10 +595,11 @@ ${notesSection(sink)}
 
   const tocItems = spine.filter((s) => s.inToc)
   const firstChapter = tocItems[0]
+  const arvore = tocArvore(tocItems)
   const navBody = `<nav epub:type="toc" id="toc" role="doc-toc">
 <h1>Sumário</h1>
 <ol>
-${tocItems.map((s) => `<li><a href="${s.href}">${esc(s.title)}</a></li>`).join('\n')}
+${arvore.map((n) => navLi(n)).join('\n')}
 </ol>
 </nav>
 <nav epub:type="landmarks" id="landmarks" hidden="">
@@ -559,10 +624,10 @@ ${firstChapter ? `<li><a epub:type="bodymatter" href="${firstChapter.href}">Come
     `${O}toc.ncx`,
     `<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1" xml:lang="pt-BR">
-<head><meta name="dtb:uid" content="${esc(identifier)}"/><meta name="dtb:depth" content="1"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head>
+<head><meta name="dtb:uid" content="${esc(identifier)}"/><meta name="dtb:depth" content="${arvore.some((n) => n.filhos.length) ? 2 : 1}"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head>
 <docTitle><text>${esc(meta.title)}</text></docTitle>
 <navMap>
-${tocItems.map((s, i) => `<navPoint id="np${i + 1}" playOrder="${i + 1}"><navLabel><text>${esc(s.title)}</text></navLabel><content src="${s.href}"/></navPoint>`).join('\n')}
+${ncxPoints(arvore)}
 </navMap>
 </ncx>
 `
@@ -607,5 +672,5 @@ ${spine.map((s) => `<itemref idref="${s.id}"${s.linear === false ? ' linear="no"
   await mkdir(outDir, { recursive: true })
   const epubPath = join(outDir, `${slugify(meta.title)}.epub`)
   await writeFile(epubPath, buf)
-  return { epubPath, capitulos: chapters.length, notas: notes, capa, aberturas: arts, figuras, fonte: fonte ? l.font : null, bytes: buf.length }
+  return { epubPath, capitulos: chapters.filter((c) => c.kind !== 'parte').length, notas: notes, capa, aberturas: arts, figuras, fonte: fonte ? l.font : null, bytes: buf.length }
 }

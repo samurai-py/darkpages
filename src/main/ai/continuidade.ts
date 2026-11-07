@@ -3,6 +3,7 @@ import type { ChapterKind } from '../../shared/types'
 import { numerarCapitulos } from '../../shared/rotulo'
 import { escaparRegex, numeroCapitulo, contexto, semAcento, type Troca } from './texto'
 import { mencoes, nomesDaFicha, type Mencao } from './contexto'
+import { chaveConflito } from '../../shared/decisoes'
 
 /**
  * Primeiro passe de continuidade, determinístico (sem IA):
@@ -78,6 +79,7 @@ export function nomeDaPosicao(i: number, caps: CapituloOrdem[]): string {
   if (!c) return 'este capítulo'
   if (c.kind === 'prologo') return 'prólogo'
   if (c.kind === 'epilogo') return 'epílogo'
+  if (c.kind === 'parte') return 'página de parte'
   return `cap. ${numerarCapitulos(caps)[i]}`
 }
 
@@ -155,6 +157,32 @@ export interface ConflitoComTroca extends Conflito {
   troca?: Troca & { inicio: number }
 }
 
+/**
+ * A posição está dentro de uma fala? Parágrafo que começa com travessão
+ * (diálogo à brasileira) ou trecho entre aspas (“…”, "…", «…») no parágrafo.
+ */
+export function dentroDeFala(texto: string, pos: number): boolean {
+  const ini = texto.lastIndexOf('\n\n', pos)
+  const iniPar = ini < 0 ? 0 : ini + 2
+  const fimRel = texto.indexOf('\n\n', pos)
+  const par = texto.slice(iniPar, fimRel < 0 ? texto.length : fimRel)
+  if (/^\s*(?:[—–]|-\s)/.test(par)) return true
+  const rel = pos - iniPar
+  const antes = par.slice(0, rel)
+  // aspas curvas: abriu e não fechou antes da posição
+  if ((antes.match(/[“«]/g)?.length ?? 0) > (antes.match(/[”»]/g)?.length ?? 0)) return true
+  // aspas retas: número ímpar antes da posição
+  return (antes.match(/"/g)?.length ?? 0) % 2 === 1
+}
+
+/** Como o perfil da obra afrouxa a checagem local (ver ai/perfil.ts). */
+export interface OpcoesContinuidade {
+  /** narrador não confiável: não confere atributos dentro de falas */
+  narradorNaoConfiavel?: boolean
+  /** narrativa não linear: não acusa morto que fala/age depois */
+  naoLinear?: boolean
+}
+
 const FALA = /^[\s,]*(?:—[^—\n]*—\s*)?(?:disse|diz|falou|fala|respondeu|responde|perguntou|pergunta|gritou|grita|murmurou|sussurrou|sussurra|retrucou|exclamou|chamou|riu|sorriu)\b/iu
 const ACAO = /^[\s,]*(?:se\s+)?\p{Ll}{3,}(?:ou|eu|iu|ava|ia)\b/u
 const MEMORIA = /lembr|mem[oó]ria|saudade|t[uú]mulo|enterr|funeral|morreu|morte|fantasma|esp[ií]rito|sonh|retrato|antes de morrer/i
@@ -173,7 +201,13 @@ function statusMorto(f: Ficha): { ref: RefCapitulo; valor: string } | null {
  * `capitulos` = capítulos do livro em ordem (Project.chapters). Sem ele (uso
  * antigo), cai na regra antiga: número do prefixo do arquivo.
  */
-export function continuidadeDeterministica(texto: string, file: string, lista: Ficha[], capitulos?: CapituloOrdem[]): ConflitoComTroca[] {
+export function continuidadeDeterministica(
+  texto: string,
+  file: string,
+  lista: Ficha[],
+  capitulos?: CapituloOrdem[],
+  opcoes: OpcoesContinuidade = {}
+): ConflitoComTroca[] {
   const out: ConflitoComTroca[] = []
   const todas = mencoes(texto, lista)
 
@@ -186,6 +220,7 @@ export function continuidadeDeterministica(texto: string, file: string, lista: F
       const esperado = base(attr.valor.split(/[\s,;]+/)[0] ?? '')
       if (b === esperado) continue
       const pos = m.index ?? 0
+      if (opcoes.narradorNaoConfiavel && dentroDeFala(texto, pos)) continue
       const dono = donoDaMencao(texto, pos, todas)
       if (!dono || dono.ficha.id !== attr.ficha.id) continue
       const substantivo = m[1] ?? ''
@@ -218,7 +253,8 @@ export function continuidadeDeterministica(texto: string, file: string, lista: F
     return ref.tipo === 'numero' && n > 0 && n > ref.n
   }
   const jaAvisado = new Set<string>()
-  for (const f of lista) {
+  // narrativa não linear: o capítulo posterior pode se passar antes da morte
+  for (const f of opcoes.naoLinear ? [] : lista) {
     const st = statusMorto(f)
     if (!st || !depoisDe(st.ref) || jaAvisado.has(f.id)) continue
     for (const nome of nomesDaFicha(f)) {
@@ -266,6 +302,7 @@ export function conflitosComoSugestoes(cs: ConflitoComTroca[]): Sugestao[] {
       original: c.troca?.original ?? '',
       substituto: c.troca?.substituto ?? '',
       antes: c.troca?.antes ?? '',
-      depois: c.troca?.depois ?? ''
+      depois: c.troca?.depois ?? '',
+      chave: chaveConflito(c)
     }))
 }

@@ -11,7 +11,7 @@ interface Previa {
   avisos: string[]
 }
 
-const TIPO: Record<ChapterKind, string> = { capitulo: 'Capítulo', prologo: 'Prólogo', epilogo: 'Epílogo' }
+const TIPO: Record<ChapterKind, string> = { capitulo: 'Capítulo', prologo: 'Prólogo', epilogo: 'Epílogo', parte: 'Parte' }
 
 /** Importar .docx/.txt/.md: escolhe o arquivo, mostra a divisão em capítulos e confirma. */
 export function Importar({

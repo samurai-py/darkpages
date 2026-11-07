@@ -4,6 +4,13 @@ import type { ChapterInfo } from '../../../../shared/types'
 import { TIPO_ROTULO, porNome } from '../universo/fichas'
 import { Mini } from '../universo/icons'
 import { CARTAO_ROTULO, CARTAO_TIPOS, LIGACAO_ROTULO, rotuloCapitulo } from './board'
+import { ESTADO_ROTULO } from './Selo'
+
+const EXPLICA_ESTADO: Record<Cartao['estado'], string> = {
+  canonico: 'Faz parte do plano do livro: a IA trata como planejamento.',
+  provisorio: 'Ideia ainda não aceita: a IA vê marcada como provisória, nunca como fato do livro.',
+  descartado: 'Fica no quadro, mas a IA não vê.'
+}
 
 export interface CartaoPanelProps {
   board: EnredoBoard
@@ -86,6 +93,35 @@ function PainelCartao(props: CartaoPanelProps & { c: Cartao }): ReactElement {
         placeholder={c.tipo === 'personagem' ? 'papel na trama (opcional)' : 'Título'}
         onChange={(e) => set({ titulo: e.target.value })}
       />
+
+      <section className={`en-estado s-${c.estado}`} aria-labelledby={`${uid}-e`}>
+        <span className="en-eb" id={`${uid}-e`}>
+          <Mini name={c.estado === 'descartado' ? 'descartar' : c.estado === 'provisorio' ? 'provisorio' : 'canonico'} size={14} />
+          {c.origem === 'ia' ? 'Veio da IA' : 'Do autor'} · {ESTADO_ROTULO[c.estado]}
+        </span>
+        <p className="en-estado-txt">{EXPLICA_ESTADO[c.estado]}</p>
+        <div className="en-acts">
+          {c.estado !== 'canonico' && (
+            <button type="button" className="btn sm pri" onClick={() => set({ estado: 'canonico' })}>
+              <Mini name="canonico" /> Tornar canônico
+            </button>
+          )}
+          {c.estado === 'canonico' && (
+            <button type="button" className="btn sm" onClick={() => set({ estado: 'provisorio' })}>
+              <Mini name="provisorio" /> Marcar provisório
+            </button>
+          )}
+          {c.estado !== 'descartado' ? (
+            <button type="button" className="btn sm" onClick={() => set({ estado: 'descartado' })}>
+              <Mini name="descartar" /> Descartar
+            </button>
+          ) : (
+            <button type="button" className="btn sm" onClick={() => set({ estado: 'provisorio' })}>
+              <Mini name="provisorio" /> Recuperar como provisório
+            </button>
+          )}
+        </div>
+      </section>
 
       <div className="en-grid2">
         <label className="field">

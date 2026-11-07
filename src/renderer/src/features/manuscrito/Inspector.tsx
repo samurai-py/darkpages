@@ -451,6 +451,8 @@ function PainelIdeias(p: Props): ReactElement {
   const [pedido, setPedido] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  /** o que ficou fora do contexto enviado à IA na última geração */
+  const [avisosCtx, setAvisosCtx] = useState<string[]>([])
 
   const [ia, setIa] = useState<IaStatus | null>(null)
   useEffect(() => {
@@ -472,6 +474,7 @@ function PainelIdeias(p: Props): ReactElement {
       await p.antesDaIA()
       const r = await call<IdeiasResult>('ia.ideias', p.dir, p.file, pedido.trim() || undefined)
       setIdeias((v) => [...comUid(r.ideias ?? []), ...v])
+      setAvisosCtx(r.avisos ?? [])
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
     } finally {
@@ -508,7 +511,9 @@ function PainelIdeias(p: Props): ReactElement {
         titulo: palavras.slice(0, 7).join(' ') + (palavras.length > 7 ? '…' : ''),
         texto: alvo.texto,
         capitulo: p.file,
-        fichas: ligadas
+        fichas: ligadas,
+        // ideia da IA: entra no Enredo como provisória
+        origem: 'ia'
       })
       setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, noEnredo: true } : i)))
     } catch (e) {
@@ -560,6 +565,11 @@ function PainelIdeias(p: Props): ReactElement {
         {erro && (
           <p className="err" role="alert">
             {erro}
+          </p>
+        )}
+        {avisosCtx.length > 0 && (
+          <p className="label" role="note">
+            Contexto reduzido: {avisosCtx.join(' ')}
           </p>
         )}
         {ideias.length === 0 && !carregando && !erro && (

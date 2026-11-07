@@ -4,6 +4,7 @@ import type { Cartao, Ficha } from '../../../../shared/models'
 import { Retrato } from '../universo/Retrato'
 import { Mini } from '../universo/icons'
 import { CARTAO_ROTULO } from './board'
+import { Selo } from './Selo'
 
 export type CartaoData = {
   cartao: Cartao
@@ -35,24 +36,26 @@ function CartaoNodeBase({ data, selected }: NodeProps<CartaoNodeT>): ReactElemen
     const nome = f?.nome || c.titulo || 'Sem ficha'
     const sub = c.titulo && f && c.titulo !== f.nome ? c.titulo : f?.papel
     return (
-      <div className={`en-person${selected ? ' sel' : ''}`}>
+      <div className={`en-person es-${c.estado}${selected ? ' sel' : ''}`}>
         <Alcas />
         <span className="en-face">
           {f ? <Retrato ficha={f} url={retrato} /> : <Retrato ficha={{ nome, tipo: 'personagem' }} url={null} />}
         </span>
         <span className="disp en-pname">{nome}</span>
         {sub && <span className="en-prole">{sub}</span>}
+        <Selo c={c} />
       </div>
     )
   }
   return (
-    <div className={`en-card en-${c.tipo}${selected ? ' sel' : ''}`}>
+    <div className={`en-card en-${c.tipo} es-${c.estado}${selected ? ' sel' : ''}`}>
       <Alcas />
       <span className="en-eb">
         <Mini name={c.tipo} size={13} />
         {CARTAO_ROTULO[c.tipo].um}
         {cap && ` · ${cap}`}
       </span>
+      <Selo c={c} />
       <span className="disp en-title">{c.titulo || 'Sem título'}</span>
       {c.texto && <span className="en-text">{c.texto}</span>}
       {fichas.length > 0 && (

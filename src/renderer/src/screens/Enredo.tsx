@@ -10,14 +10,22 @@ import { Quadro, type Selecao } from '../features/enredo/Quadro'
 import { Roteiro } from '../features/enredo/Roteiro'
 import { Mural } from '../features/enredo/Mural'
 import { CartaoPanel } from '../features/enredo/CartaoPanel'
+import { Memoria } from '../features/enredo/Memoria'
+import { FILTROS_ESTADO, passaFiltro, type FiltroEstado } from '../features/enredo/Selo'
 import './enredo.css'
 
-type Visao = 'quadro' | 'roteiro' | 'mural'
+/**
+ * "Memória" fica no Enredo: é a história capítulo a capítulo do ponto de vista
+ * da IA (o que ela lembra de cada um), ao lado do roteiro e do mural, que são
+ * a mesma história do ponto de vista do plano do autor.
+ */
+type Visao = 'quadro' | 'roteiro' | 'mural' | 'memoria'
 
 const VISOES: Array<{ id: Visao; nome: string }> = [
   { id: 'quadro', nome: 'Quadro' },
   { id: 'roteiro', nome: 'Roteiro' },
-  { id: 'mural', nome: 'Mural' }
+  { id: 'mural', nome: 'Mural' },
+  { id: 'memoria', nome: 'Memória' }
 ]
 
 const ESPERA_SALVAR = 700
@@ -28,7 +36,8 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
   const [board, setBoard] = useState<EnredoBoard | null>(null)
   const [fichas, setFichas] = useState<Ficha[]>([])
   const [erro, setErro] = useState('')
-  const [visao, setVisao] = useState<Visao>('quadro')
+  const [visao, setVisao] = useState<Visao>(() => (params['visao'] === 'memoria' ? 'memoria' : 'quadro'))
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('vivos')
   const [sel, setSel] = useState<Selecao>(null)
   const [focar, setFocar] = useState<string | null>(null)
   const [status, setStatus] = useState('')
@@ -107,6 +116,14 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
   const fichasMap = useMemo(() => new Map(fichas.map((f) => [f.id, f])), [fichas])
   const retratos = useRetratos(dir, fichas)
   const b = board ?? BOARD_VAZIO
+  // filtro de origem/estado: as visões só mostram; as mudanças vão para o quadro inteiro
+  const bVisivel = useMemo((): EnredoBoard => {
+    if (filtroEstado === 'todos') return b
+    const cartoes = b.cartoes.filter((c) => passaFiltro(c, filtroEstado))
+    const ids = new Set(cartoes.map((c) => c.id))
+    return { cartoes, ligacoes: b.ligacoes.filter((l) => ids.has(l.de) && ids.has(l.para)) }
+  }, [b, filtroEstado])
+  const nProvisorios = b.cartoes.filter((c) => c.estado === 'provisorio').length
 
   // ---------- ações ----------
   const selecionarCartao = (id: string, novo = false): void => {
@@ -212,7 +229,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
               className="en-tab"
               onClick={() => setVisao(v.id)}
             >
-              <Mini name={v.id === 'quadro' ? 'ligar' : v.id === 'roteiro' ? 'cena' : 'capitulo'} />
+              <Mini name={v.id === 'quadro' ? 'ligar' : v.id === 'roteiro' ? 'cena' : v.id === 'memoria' ? 'memoria' : 'capitulo'} />
               {v.nome}
             </button>
           ))}
@@ -223,6 +240,25 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
         <span className="pill">
           <b>{b.ligacoes.length}</b> {b.ligacoes.length === 1 ? 'ligação' : 'ligações'}
         </span>
+        {visao !== 'memoria' && (
+          <label className="en-festado">
+            <Mini name="provisorio" size={14} />
+            <span className="en-sr">Mostrar cartões</span>
+            <select className="select" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value as FiltroEstado)}>
+              {FILTROS_ESTADO.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                  {f.id === 'provisorios' && nProvisorios ? ` (${nProvisorios})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {visao !== 'memoria' && nProvisorios > 0 && filtroEstado !== 'provisorios' && (
+          <button type="button" className="pill en-pprov" onClick={() => setFiltroEstado('provisorios')}>
+            <b>{nProvisorios}</b> {nProvisorios === 1 ? 'ideia provisória da IA' : 'ideias provisórias'}
+          </button>
+        )}
         <span className="en-status label" role="status">
           {status}
         </span>
@@ -231,10 +267,11 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
 
       <div className="en-body">
         <div className="en-view" id="en-visao" role="tabpanel" aria-labelledby={`en-tab-${visao}`} aria-busy={!board}>
-          {!board && <div className="empty">Carregando enredo…</div>}
+          {!board && visao !== 'memoria' && <div className="empty">Carregando enredo…</div>}
+          {visao === 'memoria' && <Memoria dir={dir} chapters={chapters} onAbrirCapitulo={abrirCapitulo} />}
           {board && visao === 'quadro' && (
             <Quadro
-              board={b}
+              board={bVisivel}
               fichas={fichasMap}
               retratos={retratos}
               chapters={chapters}
@@ -251,7 +288,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
           )}
           {board && visao === 'roteiro' && (
             <Roteiro
-              board={b}
+              board={bVisivel}
               chapters={chapters}
               fichas={fichasMap}
               selId={selId}
@@ -263,7 +300,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
           )}
           {board && visao === 'mural' && (
             <Mural
-              board={b}
+              board={bVisivel}
               chapters={chapters}
               fichas={fichasMap}
               retratos={retratos}
@@ -275,7 +312,7 @@ export function Enredo({ project, go, params }: ScreenProps): ReactElement {
             />
           )}
         </div>
-        {painel}
+        {visao !== 'memoria' && painel}
       </div>
     </div>
   )

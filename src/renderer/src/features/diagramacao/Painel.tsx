@@ -4,6 +4,7 @@ import type { FrontMatter } from '../../../../shared/types'
 import { NumField, Stepper, TextField } from './fields'
 import { Ico } from './icons'
 import { RotuloSeletor } from './RotuloSeletor'
+import { ESTILOS_ROTULO_PARTE } from '../../../../shared/rotulo'
 import { ModelosLayout } from './ModelosLayout'
 import {
   DROPCAPS,
@@ -165,6 +166,14 @@ export function Painel({ dir, l, set, pages, fontes, checks, checking }: Props):
         <fieldset className="dg-rotulo">
           <legend>Nome dos capítulos</legend>
           <RotuloSeletor value={l.rotulo} onChange={(rotulo) => set({ rotulo })} />
+        </fieldset>
+        <fieldset className="dg-rotulo">
+          <legend>Nome das partes</legend>
+          <RotuloSeletor value={l.rotuloParte} onChange={(rotuloParte) => set({ rotuloParte })} estilos={ESTILOS_ROTULO_PARTE} item="parte" />
+          <label className="check">
+            <input type="checkbox" checked={l.reiniciarNumeracao} onChange={(e) => set({ reiniciarNumeracao: e.target.checked })} />
+            Recomeçar a numeração dos capítulos em cada parte
+          </label>
         </fieldset>
         <div className="dg-grid2">
           <label className="field">

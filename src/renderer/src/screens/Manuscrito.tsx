@@ -22,7 +22,7 @@ import { fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura } from '..
 import type { Furo } from '../features/manuscrito/extensions'
 import { NomeCapitulos } from '../features/manuscrito/NomeCapitulos'
 import { Versoes } from '../features/versoes/Versoes'
-import { resolveRotulo } from '../../../shared/rotulo'
+import { resolveNumeracao } from '../../../shared/rotulo'
 import { SyncStatus } from '../features/sync/SyncStatus'
 import { SpotifyPlayer } from '../features/spotify/Player'
 import './manuscrito.css'
@@ -386,6 +386,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
       if (!inserirRascunho(atual, r.texto, id, pontoDeInsercao(atual, usarCursor && teveFoco.current))) throw new Error('A IA não devolveu texto aproveitável.')
       setRascunho({ id, file, ideia, ponto, carregando: false, erro: null, ...(insightId ? { insightId } : {}) })
       mostrarRascunho(id)
+      if (r.avisos?.length) toast({ id: 'redigir-ctx', tipo: 'info', titulo: 'Contexto da IA reduzido', texto: r.avisos.join(' ') })
     } finally {
       fecharToast('redigir')
     }
@@ -484,6 +485,23 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     const p = await folio.addChapter(dir, t)
     onProject(p)
     setCurrent(p.chapters.at(-1)?.file ?? null)
+  }
+
+  /** Nova parte: criada no fim e movida para antes do capítulo aberto (os seguintes passam a pertencer a ela). */
+  const criarParte = async (t: string): Promise<void> => {
+    await flushAll()
+    let p = await folio.addChapter(dir, t, 'parte')
+    let nova = p.chapters.at(-1)?.file ?? null
+    const antesDe = current && p.chapters.some((c) => c.file === current) ? current : null
+    if (nova && antesDe) {
+      const ordem = p.chapters.map((c) => c.file).filter((f) => f !== nova)
+      ordem.splice(ordem.indexOf(antesDe), 0, nova)
+      const r = await call<{ project: Project; renomeados: Record<string, string> }>('manuscrito.reordenar', dir, ordem)
+      p = r.project
+      nova = r.renomeados[nova] ?? nova
+    }
+    onProject(p)
+    setCurrent(nova)
   }
 
   const renomear = async (file: string, t: string): Promise<void> => {
@@ -641,7 +659,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const paginasCap = paginasCapitulo(palavrasCap, layout)
   const st = estadoSalvo(corpo.state, meta.state)
   const presentes = useMemo(() => fichasNoTexto(`${title}\n${textoLento}`, fichas), [textoLento, title, fichas])
-  const rotuloCfg = resolveRotulo(project.meta.layout)
+  const rotuloCfg = resolveNumeracao(project.meta.layout)
   const rotulo = current ? rotuloLongo(project.chapters, current, rotuloCfg) : ''
 
   return (
@@ -655,6 +673,7 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           onMetas={salvarMetas}
           onAbrir={(f) => void switchTo(f)}
           onCriar={criar}
+          onCriarParte={criarParte}
           onRenomear={renomear}
           onMover={mover}
           onTipo={mudarTipo}

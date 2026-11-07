@@ -1,6 +1,7 @@
 import { useId, type ReactElement } from 'react'
 import {
   ESTILOS_ROTULO,
+  generoSugerido,
   rotuloCapitulo,
   type CaixaRotulo,
   type EstiloRotulo,
@@ -12,23 +13,31 @@ import './rotulo-seletor.css'
 interface Props {
   value: RotuloCfg
   onChange: (cfg: RotuloCfg) => void
+  /** lista de estilos (padrão: a dos capítulos; as partes usam ESTILOS_ROTULO_PARTE) */
+  estilos?: { v: EstiloRotulo; label: string }[]
+  /** "capítulo" ou "parte": usado no exemplo e no placeholder */
+  item?: 'capitulo' | 'parte'
 }
 
 const SEM_PALAVRA: EstiloRotulo[] = ['romano', 'numero', 'nenhum']
 
 /** Seletor do nome dos capítulos (Diagramação e Manuscrito usam o mesmo). */
-export function RotuloSeletor({ value: v, onChange }: Props): ReactElement {
+export function RotuloSeletor({ value: v, onChange, estilos = ESTILOS_ROTULO, item = 'capitulo' }: Props): ReactElement {
   const id = useId()
   const set = (patch: Partial<RotuloCfg>): void => onChange({ ...v, ...patch })
   const usaPalavra = !SEM_PALAVRA.includes(v.estilo)
-  const exemplos = v.estilo === 'nenhum' ? 'só o título do capítulo' : [1, 2, 3].map((n) => rotuloCapitulo(n, v)).join(', ')
+  const nomeItem = item === 'parte' ? 'da parte' : 'do capítulo'
+  const exemplos = v.estilo === 'nenhum' ? `só o título ${nomeItem}` : [1, 2, 3].map((n) => rotuloCapitulo(n, v)).join(', ')
 
   return (
     <div className="rt-sel">
       <label className="field">
         Estilo
-        <select className="select" value={v.estilo} onChange={(e) => set({ estilo: e.target.value as EstiloRotulo })}>
-          {ESTILOS_ROTULO.map((e) => (
+        <select className="select" value={v.estilo} onChange={(e) => {
+            const estilo = e.target.value as EstiloRotulo
+            set(item === 'parte' ? { estilo, genero: generoSugerido(estilo, v.palavra, v.genero) } : { estilo })
+          }}>
+          {estilos.map((e) => (
             <option key={e.v} value={e.v}>{e.label}</option>
           ))}
         </select>
@@ -55,7 +64,7 @@ export function RotuloSeletor({ value: v, onChange }: Props): ReactElement {
             <input
               className="input"
               value={v.palavra}
-              placeholder="Capítulo"
+              placeholder={item === 'parte' ? 'Parte' : 'Capítulo'}
               disabled={!usaPalavra}
               onChange={(e) => set({ palavra: e.target.value })}
             />

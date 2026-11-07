@@ -90,12 +90,33 @@ function blocos(texto: string, max: number): Array<{ inicio: number; texto: stri
 
 const espera = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+/** Normaliza para comparar com o dicionário do livro (sem acento, minúsculo). */
+function chaveDicionario(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+/**
+ * Erro de ortografia sobre uma palavra do dicionário do livro (nomes das
+ * fichas, termos do Idioma, palavras mantidas)? Então não é erro.
+ *
+ * O dicionário é aplicado aqui, nas respostas, e não enviado ao servidor: a
+ * API /v2/check só aceita dicionário próprio em contas premium (parâmetros
+ * username/apiKey + palavras salvas na conta), o que não vale para servidor
+ * local nem para o público gratuito.
+ */
+export function noDicionario(original: string, dicionario: Set<string> | undefined): boolean {
+  if (!dicionario?.size) return false
+  const palavras = original.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu) ?? []
+  return palavras.length > 0 && palavras.every((w) => dicionario.has(chaveDicionario(w)))
+}
+
 /**
  * Roda o LanguageTool no corpo Markdown do capítulo e devolve sugestões com o
  * trecho original exato. A marcação Markdown é trocada por espaços do mesmo
  * tamanho antes do envio, então os deslocamentos batem com o texto original.
+ * `dicionario`: palavras do livro (ver ai/decisoes.ts) que não contam como erro de ortografia.
  */
-export async function checarLanguageTool(ctx: Ctx, corpo: string): Promise<Sugestao[]> {
+export async function checarLanguageTool(ctx: Ctx, corpo: string, dicionario?: Set<string>): Promise<Sugestao[]> {
   const s = await revisorSettings(ctx)
   const base = ltBase(s)
   if (!base) return []
@@ -133,22 +154,30 @@ export async function checarLanguageTool(ctx: Ctx, corpo: string): Promise<Suges
     for (const m of j.matches ?? []) {
       const ini = parte.inicio + m.offset
       const original = corpo.slice(ini, ini + m.length)
-      const sub = m.replacements?.[0]?.value
-      if (sub === undefined || !original.trim() || sub === original) continue
+      const subs = (m.replacements ?? [])
+        .map((r) => r.value)
+        .filter((v): v is string => typeof v === 'string' && v !== original)
+        .filter((v, i, a) => a.indexOf(v) === i)
+      const sub = subs[0]
+      if (sub === undefined || !original.trim()) continue
       // pula trechos que tocam marcação Markdown mascarada
       if (plano.slice(ini, ini + m.length) !== original) continue
+      const cat = categoria(m)
+      if (cat === 'ortografia' && noDicionario(original, dicionario)) continue
       const { antes, depois } = contexto(corpo, ini, m.length)
       const chave = `${ini}:${original}:${sub}`
       if (vistos.has(chave)) continue
       vistos.add(chave)
       out.push({
         id: `lt-${ini}-${out.length}`,
-        categoria: categoria(m),
+        categoria: cat,
         motivo: m.shortMessage || m.message || m.rule?.description || 'Regra do LanguageTool',
         original,
         substituto: sub,
         antes,
-        depois
+        depois,
+        ...(subs.length > 1 ? { alternativas: subs.slice(1, 4) } : {}),
+        ...(m.rule?.id ? { regra: m.rule.id.slice(0, 120) } : {})
       })
     }
   }

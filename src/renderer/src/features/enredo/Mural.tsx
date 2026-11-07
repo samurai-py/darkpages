@@ -5,6 +5,7 @@ import { Retrato } from '../universo/Retrato'
 import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { CARTAO_ROTULO, doCapitulo, rotuloCapitulo } from './board'
+import { Selo } from './Selo'
 
 export interface MuralProps {
   board: EnredoBoard
@@ -66,7 +67,7 @@ export function Mural(props: MuralProps): ReactElement {
               return (
                 <li
                   key={c.id}
-                  className={`en-mcard en-${c.tipo}${c.id === selId ? ' sel' : ''}${sobre === `m:${c.id}` ? ' drop' : ''}`}
+                  className={`en-mcard en-${c.tipo} es-${c.estado}${c.id === selId ? ' sel' : ''}${sobre === `m:${c.id}` ? ' drop' : ''}`}
                   {...arrastavel(c.id)}
                   {...soltavel(`m:${c.id}`, setSobre, (id) => props.onMover(id, col.cap, c.id))}
                 >
@@ -74,6 +75,7 @@ export function Mural(props: MuralProps): ReactElement {
                     <span className="en-eb">
                       <Mini name={c.tipo} size={13} /> {CARTAO_ROTULO[c.tipo].um}
                     </span>
+                    <Selo c={c} />
                     {c.tipo === 'personagem' && f0 ? (
                       <span className="en-mperson">
                         <span className="en-mface">

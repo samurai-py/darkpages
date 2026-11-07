@@ -158,6 +158,18 @@
   list-style: none; margin: 0; padding: 4px 0; overflow: auto; flex: 1; min-height: 80px; max-height: 300px;
   display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
+/* perfil da obra */
+.uv-perfil { width: min(600px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); overflow: auto; }
+.uv-perfil-ops { display: flex; flex-direction: column; gap: 8px; }
+.uv-perfil-op {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: calc(var(--rad) - 2px); transition: border-color .2s var(--ease), background-color .2s var(--ease);
+}
+.uv-perfil-op:hover { border-color: var(--muted); }
+.uv-perfil-op.on { border-color: var(--acc); background: var(--chipbg); }
+.uv-perfil-op input { margin-top: 3px; accent-color: var(--acc); }
+.uv-perfil-op > span { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.uv-perfil-op .label { line-height: 1.45; }
 .uv-tag { margin-left: 8px; font-size: 10.5px; padding: 2px 7px; border-radius: 999px; background: var(--chipbg); color: var(--acc); }
 
 @media (max-width: 1100px) {

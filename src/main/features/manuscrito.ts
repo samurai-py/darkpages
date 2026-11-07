@@ -24,7 +24,7 @@ import { lerArquivo, previa, type CapImportado, type PreviaImport } from './manu
  * metadados de cena no front-matter, importação e exportação.
  */
 
-const KINDS: ChapterKind[] = ['capitulo', 'prologo', 'epilogo']
+const KINDS: ChapterKind[] = ['capitulo', 'prologo', 'epilogo', 'parte']
 const FORMATOS: FormatoExport[] = ['docx', 'md', 'txt']
 
 function kind(v: unknown): ChapterKind {

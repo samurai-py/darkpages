@@ -46,6 +46,16 @@ export interface Ficha {
 // ---------------------------------------------------------------------------
 export type CartaoTipo = 'cena' | 'virada' | 'personagem' | 'ideia' | 'local'
 
+/** Quem criou o cartão: o autor ou uma sugestão da IA ("→ Enredo", "Virar cartão"). */
+export type CartaoOrigem = 'autor' | 'ia'
+/**
+ * Peso do cartão no livro. "canonico" = plano do autor (a IA trata como fato do
+ * planejamento); "provisorio" = ideia ainda não aceita (a IA vê marcada como
+ * provisória); "descartado" = fica no quadro, fora do contexto da IA.
+ * Cartão vindo da IA nasce provisório; legado sem campo = autor/canonico.
+ */
+export type CartaoEstado = 'canonico' | 'provisorio' | 'descartado'
+
 export interface Cartao {
   id: string
   tipo: CartaoTipo
@@ -59,6 +69,8 @@ export interface Cartao {
   y: number
   /** ordem no roteiro do capítulo */
   ordem?: number
+  origem: CartaoOrigem
+  estado: CartaoEstado
   criadoEm: string
 }
 
@@ -103,6 +115,8 @@ export interface Ideia {
 /** 'ia.ideias'(dir, chapterFile, pedido?: string) → Ideia[] */
 export interface IdeiasResult {
   ideias: Ideia[]
+  /** o que ficou fora do contexto enviado à IA (ex.: resumos antigos cortados por tamanho) */
+  avisos?: string[]
 }
 
 /** 'ia.sinonimos'(palavra, frase) → { sinonimos: string[]; fortes: string[]; classe: string } */
@@ -131,9 +145,93 @@ export interface BetaLeitura {
   melhorar: string
   citacao: string
   geradoEm: string
+  /** o que ficou fora do contexto enviado à IA */
+  avisos?: string[]
 }
 
-/** 'ia.resumo'(dir, chapterFile) → { resumo: string } (cacheado em coleção "resumos") */
+/** 'ia.resumo'(dir, chapterFile) → { resumo, travado, desatualizado } (cacheado em coleção "resumos") */
+
+// ---------------------------------------------------------------------------
+// MEMÓRIA DO LIVRO — resumos por capítulo que a IA "lembra". DONO: IA
+// Coleção "resumos", um documento por capítulo (chave = id estável).
+// Métodos 'memoria.*' em src/main/features/revisao.ts. Tela: Enredo › Memória.
+// ---------------------------------------------------------------------------
+export type MemoriaEstado = 'atual' | 'desatualizado' | 'sem-resumo' | 'sem-texto'
+
+export interface MemoriaItem {
+  file: string
+  /** id estável do capítulo */
+  id: string
+  titulo: string
+  palavras: number
+  resumo: string
+  estado: MemoriaEstado
+  /** editado pelo autor: a IA nunca sobrescreve */
+  travado: boolean
+  geradoEm?: string
+  editadoEm?: string
+}
+
+// ---------------------------------------------------------------------------
+// PERFIL DA OBRA — coleção "config", doc "perfil". DONO: IA
+// Acrescenta instruções a todos os prompts e afrouxa checagens locais.
+// ---------------------------------------------------------------------------
+export interface PerfilObra {
+  /** falas e narração podem mentir de propósito */
+  narradorNaoConfiavel: boolean
+  /** lacunas e duplo sentido são intencionais */
+  ambiguidadeDeliberada: boolean
+  /** a ordem dos capítulos não é a ordem dos acontecimentos */
+  naoLinear: boolean
+  /** texto livre para a IA: tom, regras do universo, o que nunca fazer */
+  notasIa: string
+}
+
+export const PERFIL_PADRAO: PerfilObra = { narradorNaoConfiavel: false, ambiguidadeDeliberada: false, naoLinear: false, notasIa: '' }
+
+// ---------------------------------------------------------------------------
+// DECISÕES DE REVISÃO — coleção "revisao", doc "decisoes" { itens }. DONO: IA
+// "Sempre manter" no Revisor. Respeitadas pelo Revisor, pela continuidade e
+// pelos insights proativos (ver src/shared/decisoes.ts).
+// ---------------------------------------------------------------------------
+export type DecisaoTipo = 'manter-palavra' | 'manter-trecho' | 'ignorar-regra' | 'continuidade'
+
+export interface DecisaoRevisao {
+  id: string
+  tipo: DecisaoTipo
+  /** palavra, trecho, id da regra do LanguageTool ou chave do conflito */
+  valor: string
+  /** id estável do capítulo quando a decisão vale só nele */
+  capitulo?: string
+  /** texto curto para a lista ("ortografia: Kaelith") */
+  rotulo?: string
+  criadoEm: string
+}
+
+// ---------------------------------------------------------------------------
+// RITMO — métricas baratas por capítulo (só visualização). DONO: IA
+// ---------------------------------------------------------------------------
+export interface MetricasRitmo {
+  palavras: number
+  frases: number
+  paragrafos: number
+  /** palavras por frase */
+  mediaFrase: number
+  /** palavras por parágrafo */
+  mediaParagrafo: number
+  /** 0–100: parcela das palavras em parágrafos de fala */
+  pctDialogo: number
+  /** primeiras palavras de frase que se repetem (3+ vezes), mais frequentes primeiro */
+  iniciosRepetidos: Array<{ inicio: string; n: number }>
+}
+
+/** 'revisao.ritmo'(dir, chapterFile) → capítulo × média do livro */
+export interface RitmoComparado {
+  capitulo: MetricasRitmo
+  livro: MetricasRitmo
+  /** capítulos que entraram na média */
+  capitulosNaMedia: number
+}
 
 export type SugestaoCategoria = 'ortografia' | 'gramatica' | 'estilo' | 'repeticao' | 'continuidade'
 
@@ -149,6 +247,18 @@ export interface Sugestao {
   /** contexto antes/depois para exibir */
   antes: string
   depois: string
+  /** outras substituições possíveis (LanguageTool), até 3 */
+  alternativas?: string[]
+  /** id da regra do LanguageTool (para "sempre ignorar esta regra") */
+  regra?: string
+  /** chave do conflito de continuidade (fichaId|campo|trecho) */
+  chave?: string
+  /** palavra repetida (repetição local), forma comparada */
+  palavra?: string
+  /** só aponta, não tem troca (ex.: repetição local); "Aceitar" não se aplica */
+  soAviso?: boolean
+  /** trechos a destacar dentro de `original` ([início, fim) relativos) */
+  marcas?: Array<[number, number]>
 }
 
 // ---------------------------------------------------------------------------

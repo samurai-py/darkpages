@@ -14,7 +14,7 @@ import {
 } from 'docx'
 import { openProject, readChapter, slugify } from '../project'
 import { atomicWrite } from '../store/docs'
-import { DEFAULT_ROTULO, resolveRotulo, rotuloTela, type RotuloCfg } from '../../shared/rotulo'
+import { DEFAULT_ROTULO, DEFAULT_ROTULO_PARTE, numerarItens, resolveNumeracao, rotuloTela, type RotuloCfg } from '../../shared/rotulo'
 import { assetName, parseBody, parseInline, plainText, type Block, type Inline } from '../layout/markdown'
 import { imageKind, imageSize } from '../layout/assets'
 import { resolveLayout, type FullLayout } from '../layout/settings'
@@ -29,9 +29,9 @@ import type { ChapterContent, ChapterKind, EpigrafeCap } from '../../shared/type
 
 export type FormatoExport = 'docx' | 'md' | 'txt'
 
-/** Rótulo acima do título no arquivo exportado ("Capítulo 3", "Primeiro Círculo", "Prólogo"), conforme o nome dos capítulos do livro. */
-export function rotuloCapitulo(kind: ChapterKind, n: number, cfg: RotuloCfg = DEFAULT_ROTULO): string {
-  return rotuloTela(kind, n, cfg) ?? ''
+/** Rótulo acima do título no arquivo exportado ("Capítulo 3", "Primeiro Círculo", "Prólogo", "Parte um"), conforme o nome dos capítulos e das partes do livro. */
+export function rotuloCapitulo(kind: ChapterKind, n: number, cfg: RotuloCfg = DEFAULT_ROTULO, cfgParte: RotuloCfg = DEFAULT_ROTULO_PARTE): string {
+  return rotuloTela(kind, n, cfg, cfgParte) ?? ''
 }
 
 type Cap = ChapterContent & { n: number; rotulo: string }
@@ -64,13 +64,18 @@ function finaisDe(l: FullLayout): Final[] {
 async function lerTodos(dir: string): Promise<Livro> {
   const p = await openProject(dir)
   const caps: Cap[] = []
-  const cfg = resolveRotulo(p.meta.layout)
-  let n = 0
-  for (const c of p.chapters) {
-    if (c.kind === 'capitulo') n++
-    caps.push({ ...(await readChapter(dir, c.file)), n, rotulo: rotuloCapitulo(c.kind, n, cfg) })
+  const num = resolveNumeracao(p.meta.layout)
+  const ns = numerarItens(p.chapters, num.reiniciar)
+  for (const [i, c] of p.chapters.entries()) {
+    const n = ns[i] ?? 0
+    caps.push({ ...(await readChapter(dir, c.file)), n, rotulo: rotuloCapitulo(c.kind, n, num.rotulo, num.parte) })
   }
   return { dir, title: p.meta.title, author: p.meta.author, caps, finais: finaisDe(resolveLayout(p.meta.layout)) }
+}
+
+/** "Parte um — A travessia" (ou só um dos dois, quando o outro falta ou repete). */
+function tituloParte(c: Cap): string {
+  return c.rotulo && c.rotulo.toLowerCase() !== c.title.trim().toLowerCase() ? `${c.rotulo} — ${c.title}` : c.title || c.rotulo
 }
 
 function linhasEpigrafe(e: EpigrafeCap): Inline[][] {
@@ -139,7 +144,9 @@ function exportMd(livro: Livro): string {
   if (livro.author) parts.push(`% ${livro.author}`)
   parts.push('')
   for (const c of livro.caps) {
-    parts.push(`# ${c.title}`, '')
+    // parte: quebra de página + título de nível 1 com o rótulo ("Parte um: Título"); capítulos seguem em nível 1
+    if (c.kind === 'parte') parts.push(...(c === livro.caps[0] ? [] : ['\\pagebreak', '']), `# ${escMd(tituloParte(c))}`, '')
+    else parts.push(`# ${c.title}`, '')
     if (c.epigrafe?.texto.trim()) {
       parts.push(linhasEpigrafe(c.epigrafe).map((l) => `> *${inlineMd(l)}*`).join('\\\n'))
       if (c.epigrafe.autor?.trim()) parts.push('>', `> — ${escMd(c.epigrafe.autor.trim())}`)
@@ -221,7 +228,15 @@ function exportTxt(livro: Livro): string {
     }
     out.push('')
   }
-  for (const c of livro.caps) secao(c.rotulo, c.title, parseBody(c.body).blocks, c.epigrafe)
+  for (const c of livro.caps) {
+    if (c.kind === 'parte') {
+      // quebra de página (form feed) antes da parte, título centralizado por linhas em branco
+      if (out.length > 4) out.push('\f')
+      out.push('', '')
+    }
+    if (c.kind === 'parte') secao('', tituloParte(c).toUpperCase(), parseBody(c.body).blocks, c.epigrafe)
+    else secao(c.rotulo, c.title, parseBody(c.body).blocks, c.epigrafe)
+  }
   for (const f of livro.finais) secao('', f.titulo, parseBody(f.md).blocks, undefined, f.foto)
   return out.join('\n').replace(/\n{4,}/g, '\n\n\n')
 }
@@ -366,7 +381,18 @@ async function exportDocx(livro: Livro): Promise<Buffer> {
 
   const children: Paragraph[] = []
   for (const [i, c] of livro.caps.entries()) {
-    titulo(c.rotulo, c.title, i > 0, children)
+    if (c.kind === 'parte') {
+      // página de parte: rótulo e título mais baixos na página, em quebra própria
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          pageBreakBefore: i > 0,
+          spacing: { before: 3600, after: 160 },
+          children: [new TextRun({ text: (c.rotulo || ' ').toUpperCase(), size: 22, characterSpacing: 60 })]
+        }),
+        new Paragraph({ heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER, spacing: { after: 720 }, children: [new TextRun({ text: c.title })] })
+      )
+    } else titulo(c.rotulo, c.title, i > 0, children)
     if (c.epigrafe?.texto.trim()) {
       const ls = linhasEpigrafe(c.epigrafe)
       children.push(

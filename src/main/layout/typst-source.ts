@@ -1,6 +1,7 @@
 import type { ChapterContent, EpigrafeCap, PerfilPdf, ProjectMeta } from '../../shared/types'
 import { assetName, parseBody, parseInline, type Block, type Inline } from './markdown'
 import { chapterLabelText, numberChapters, showsTitle } from './labels'
+import { dentroDeParte } from '../../shared/rotulo'
 import { chapterDropCap, chapterOpening, resolveLayout, type FullLayout } from './settings'
 
 /**
@@ -222,18 +223,43 @@ interface ChapterCtx {
   imagens: Map<string, string>
 }
 
-function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx): string {
-  const { l } = ctx
-  const label = chapterLabelText(c.kind, n, l.rotulo)
-  const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
-  const rotulo = label && showsTitle(c, label) ? str(label) : 'none'
-  let style = chapterOpening(l, c.file)
+/** Estilo de abertura efetivo do capítulo (arte sem imagem vira ornamentada). */
+function openingOf(c: ChapterContent, ctx: ChapterCtx): { style: string; art: string | undefined } {
+  let style: string = chapterOpening(ctx.l, c.file)
   const art = ctx.assets.aberturas.get(c.file)
   if (style === 'arte' && !art) style = 'ornamentada'
-  const args = `${rotulo}, ${str(title)}, ${str(c.file)}`
+  return { style, art }
+}
+
+/**
+ * Página de parte: abre em página ímpar com rótulo ("PARTE UM"), título e o
+ * texto curto opcional (corpo do arquivo / epígrafe); o verso fica em branco
+ * (o capítulo seguinte abre na próxima ímpar). No sumário é o nível acima dos
+ * capítulos (`<folio-parte>`).
+ */
+function parteTypst(c: ChapterContent, n: number, ctx: ChapterCtx, proximo: ChapterContent | undefined): string {
+  const { l } = ctx
+  const label = chapterLabelText(c.kind, n, l.rotulo, l.rotuloParte)
+  const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
+  const rotulo = label && showsTitle(c, label) ? str(label) : 'none'
+  const corpo = c.body.trim() ? `[${textoCorrido(c.body, ctx.imagens)}]` : 'none'
+  const epi = epigrafeTypst(c.epigrafe)
+  // a arte "par" do capítulo seguinte ocupa o verso da parte; nos demais casos o verso fica em branco
+  const prox = proximo && proximo.kind !== 'parte' ? openingOf(proximo, ctx) : null
+  const versoBranco = !(prox?.style === 'arte' && l.openingArtPage === 'par')
+  return `#pagina-parte(${rotulo}, ${str(title)}, ${str(c.file)}, ${corpo}${epi ? `, epigrafe: [${epi}]` : ''})${versoBranco ? '\n#pagebreak(to: pag-impar, weak: true)' : ''}`
+}
+
+function chapterTypst(c: ChapterContent, n: number, ctx: ChapterCtx, emParte = false): string {
+  const { l } = ctx
+  const label = chapterLabelText(c.kind, n, l.rotulo, l.rotuloParte)
+  const title = showsTitle(c, label) ? c.title.trim() : (label ?? c.title.trim())
+  const rotulo = label && showsTitle(c, label) ? str(label) : 'none'
+  const { style, art } = openingOf(c, ctx)
+  const args = `${rotulo}, ${str(title)}, ${str(c.file)}${emParte ? ', em-parte: true' : ''}`
   const opening =
     style === 'arte'
-      ? `#abertura-arte(${args}, ${str(art ?? '')}, ${str(l.openingArtPage)})`
+      ? `#abertura-arte(${rotulo}, ${str(title)}, ${str(c.file)}, ${str(art ?? '')}, ${str(l.openingArtPage)}${emParte ? ', em-parte: true' : ''})`
       : style === 'ornamentada'
         ? `#abertura-ornamentada(${args})`
         : style === 'simples'
@@ -471,9 +497,12 @@ export function buildBookTypst(
   const imagens = assets.imagens ?? new Map<string, string>()
   const leadingEm = Math.max(0.3, l.lineHeight - 0.7)
   const textWidthMm = l.trim.widthMm - l.margins.insideMm - l.margins.outsideMm
-  const nums = numberChapters(chapters)
+  const nums = numberChapters(chapters, l.reiniciarNumeracao)
+  const emParte = dentroDeParte(chapters)
   const ctx: ChapterCtx = { l, assets, imagens }
-  const body = chapters.map((c, i) => chapterTypst(c, nums[i] ?? 0, ctx)).join('\n\n')
+  const body = chapters
+    .map((c, i) => (c.kind === 'parte' ? parteTypst(c, nums[i] ?? 0, ctx, chapters[i + 1]) : chapterTypst(c, nums[i] ?? 0, ctx, emParte[i] ?? false)))
+    .join('\n\n')
   const orn = ORNAMENTS[l.sceneOrnament] ?? ORNAMENTS['asterismo']
   const headerAscent = Math.max(4, l.margins.topMm * 0.45)
   const footerDescent = Math.max(4, l.margins.bottomMm * 0.4)
@@ -501,7 +530,7 @@ export function buildBookTypst(
   let marcas = query(<folio-marca>)
   let aqui = marcas.filter(m => m.location().page() == p)
   let antes = marcas.filter(m => m.location().page() < p)
-  if aqui.any(m => m.value.tipo in ("inicio", "pre", "arte")) or antes.len() == 0 { none } else {
+  if aqui.any(m => m.value.tipo in ("inicio", "pre", "arte", "parte")) or antes.len() == 0 { none } else {
     let ult = antes.last()
     // depois de um "fim" (ou de página inicial/arte) sem novo "inicio": página em branco
     if ult.value.tipo == "inicio" { ult.value } else { none }
@@ -560,10 +589,19 @@ ${g.marks ? cropMarks(l, g.slug + g.bleed) : '  none'}
 #show heading.where(level: 2): it => align(center, block(above: 1.4em, below: 1em, sticky: true, text(size: 1.05em, style: "italic", weight: "regular", it.body)))
 #show outline.entry: set block(above: 0.85em)
 #set outline.entry(fill: box(width: 1fr, repeat(gap: 0.35em)[.]))
+// partes (<folio-parte>) ficam um nível acima: espaço antes; capítulos dentro de parte (<folio-em-parte>) recuados
 #show outline.entry.where(level: 1): it => {
-  let s = it.element.supplement
-  if type(s) != content { it } else {
-    link(it.element.location(), it.indented(none, [#text(size: 0.82em, tracking: 0.12em, caixa-rotulo(s)) #h(0.6em) #it.inner()]))
+  let el = it.element
+  let s = el.supplement
+  let lb = if el.has("label") { el.label } else { none }
+  let corpo = if type(s) != content { it.inner() } else { [#text(size: 0.82em, tracking: 0.12em, caixa-rotulo(s)) #h(0.6em) #it.inner()] }
+  if lb == <folio-parte> {
+    v(0.9em)
+    link(el.location(), it.indented(none, text(style: "italic", corpo)))
+  } else if lb == <folio-em-parte> {
+    pad(left: 1.4em, link(el.location(), it.indented(none, corpo)))
+  } else if type(s) != content { it } else {
+    link(el.location(), it.indented(none, corpo))
   }
 }
 
@@ -668,24 +706,50 @@ ${g.marks ? cropMarks(l, g.slug + g.bleed) : '  none'}
 
 // ---------- aberturas de capítulo ----------
 #let rotulo-cap(r) = if r != none { align(center, text(size: 0.78em, tracking: 0.32em, caixa-rotulo(r))) }
-#let titulo-cap(rotulo, titulo) = heading(level: 1, supplement: if rotulo == none { none } else { [#rotulo] }, titulo)
+#let titulo-cap(rotulo, titulo, em-parte: false) = {
+  let h = heading(level: 1, supplement: if rotulo == none { none } else { [#rotulo] }, titulo)
+  if em-parte [#h<folio-em-parte>] else { h }
+}
+
+/// Página de parte (ímpar): rótulo, título, ornamento e texto curto opcional.
+#let pagina-parte(rotulo, titulo, arquivo, corpo, epigrafe: none) = {
+  pagebreak(to: pag-impar, weak: true)
+  marca("parte", arquivo: arquivo, titulo: titulo)
+  counter(footnote).update(0)
+  v(26%)
+  if rotulo != none { align(center, text(size: 0.86em, tracking: 0.36em, caixa-rotulo(rotulo))); v(0.5em) }
+  {
+    show heading.where(level: 1): it => align(center, block(above: 0.4em, below: 1em, text(size: 2.3em, weight: "regular", it.body)))
+    [#heading(level: 1, supplement: if rotulo == none { none } else { [#rotulo] }, titulo)<folio-parte>]
+  }
+  align(center, ornamento())
+  if epigrafe != none { v(1.6em); epigrafe }
+  if corpo != none {
+    v(1.6em)
+    align(center, block(width: 74%, {
+      set par(justify: false, first-line-indent: 0pt)
+      set text(size: 0.95em, style: "italic")
+      align(center, corpo)
+    }))
+  }
+}
 
 #let comeco(arquivo, titulo, rotulo) = {
   marca("inicio", arquivo: arquivo, titulo: if rotulo == none { titulo } else { rotulo + " · " + titulo })
   counter(footnote).update(0)
 }
 
-#let abertura-classica(rotulo, titulo, arquivo) = {
+#let abertura-classica(rotulo, titulo, arquivo, em-parte: false) = {
   pagebreak(to: pag-impar, weak: true)
   comeco(arquivo, titulo, rotulo)
   v(20%)
   rotulo-cap(rotulo)
-  titulo-cap(rotulo, titulo)
+  titulo-cap(rotulo, titulo, em-parte: em-parte)
   align(center, ornamento())
   v(2.2em)
 }
 
-#let abertura-ornamentada(rotulo, titulo, arquivo) = {
+#let abertura-ornamentada(rotulo, titulo, arquivo, em-parte: false) = {
   pagebreak(to: pag-impar, weak: true)
   comeco(arquivo, titulo, rotulo)
   v(14%)
@@ -695,24 +759,24 @@ ${g.marks ? cropMarks(l, g.slug + g.bleed) : '  none'}
   v(0.2em)
   {
     show heading.where(level: 1): it => align(center, block(above: 0.4em, below: 0.6em, text(size: 1.6em, tracking: 0.14em, weight: "regular", upper(it.body))))
-    titulo-cap(rotulo, titulo)
+    titulo-cap(rotulo, titulo, em-parte: em-parte)
   }
   align(center, line(length: 18%, stroke: 0.4pt))
   v(2.4em)
 }
 
-#let abertura-simples(rotulo, titulo, arquivo) = {
+#let abertura-simples(rotulo, titulo, arquivo, em-parte: false) = {
   pagebreak(weak: true)
   comeco(arquivo, titulo, rotulo)
   v(8%)
   rotulo-cap(rotulo)
-  titulo-cap(rotulo, titulo)
+  titulo-cap(rotulo, titulo, em-parte: em-parte)
   v(1.6em)
 }
 
 /// Arte de abertura sangrada numa página inteira. \`pagina\`: "impar" (a arte
 /// abre o capítulo e o texto começa no verso) ou "par" (frontispício diante da abertura).
-#let abertura-arte(rotulo, titulo, arquivo, imagem, pagina) = {
+#let abertura-arte(rotulo, titulo, arquivo, imagem, pagina, em-parte: false) = {
   pagebreak(to: if pagina == "par" { pag-par } else { pag-impar }, weak: true)
   page(margin: 0pt, header: none, footer: none, {
     marca("arte", arquivo: arquivo)
@@ -723,7 +787,7 @@ ${g.marks ? cropMarks(l, g.slug + g.bleed) : '  none'}
   comeco(arquivo, titulo, rotulo)
   v(12%)
   rotulo-cap(rotulo)
-  titulo-cap(rotulo, titulo)
+  titulo-cap(rotulo, titulo, em-parte: em-parte)
   align(center, ornamento())
   v(2em)
 }
@@ -739,7 +803,7 @@ ${colophon(meta, l)}
 // Mapa para a prévia: página de cada capítulo e total.
 #context [#metadata((
   total: counter(page).final().first(),
-  capitulos: query(<folio-marca>).filter(m => m.value.tipo == "inicio" and m.value.arquivo != "").map(m => (arquivo: m.value.arquivo, pagina: m.location().page())),
+  capitulos: query(<folio-marca>).filter(m => m.value.tipo in ("inicio", "parte") and m.value.arquivo != "").map(m => (arquivo: m.value.arquivo, pagina: m.location().page())),
 ))<folio-mapa>]
 `
 }

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react'
 
 /** Ícones pequenos da feature IA (traço 1.6, mesmo estilo do conjunto do Folio). */
 
-export type IconeIa = 'check' | 'x' | 'brilho' | 'refazer' | 'local' | 'nuvem' | 'alerta' | 'chave' | 'olho'
+export type IconeIa = 'check' | 'x' | 'brilho' | 'refazer' | 'local' | 'nuvem' | 'alerta' | 'chave' | 'olho' | 'manter' | 'ritmo' | 'lixo'
 
 const P: Record<IconeIa, ReactElement> = {
   check: <path d="M4.5 12.5l4.5 4.5 10.5-11" />,
@@ -36,6 +36,21 @@ const P: Record<IconeIa, ReactElement> = {
     <>
       <circle cx="8" cy="12" r="3.6" />
       <path d="M11.6 12H20.5M17.5 12v3M20 12v2.2" />
+    </>
+  ),
+  /** fita marcadora: "sempre manter" */
+  manter: (
+    <>
+      <path d="M7 3.5h10v17l-5-3.8-5 3.8z" />
+      <path d="M9.8 9.6l1.6 1.6 3-3.4" />
+    </>
+  ),
+  /** barras de comprimento variado: ritmo das frases */
+  ritmo: <path d="M4 19.5V13M8 19.5V7M12 19.5v-9M16 19.5V4.5M20 19.5v-5" />,
+  lixo: (
+    <>
+      <path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" />
+      <path d="M10.5 11v5.5M13.5 11v5.5" />
     </>
   ),
   olho: (

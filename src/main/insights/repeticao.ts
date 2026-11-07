@@ -1,4 +1,5 @@
-import { mascararMarkdown, semAcento } from '../ai/texto'
+import { contexto, mascararMarkdown, semAcento } from '../ai/texto'
+import type { Sugestao } from '../../shared/models'
 
 /**
  * Repetição próxima (local, determinística, sem IA): a mesma palavra de 5+
@@ -96,4 +97,44 @@ export function avisosRepeticao(md: string, max = 3, janela = 30): AvisoRepetica
   }
   for (const a of porFrase.values()) a.palavras.sort((x, y) => y.n - x.n)
   return [...porFrase.values()].sort((a, b) => b.n - a.n).slice(0, max)
+}
+
+/** Quantas palavras há do início da primeira ao fim da última ocorrência do grupo. */
+export function palavrasNoGrupo(md: string, g: GrupoRepeticao): number {
+  return mascararMarkdown(md.slice(g.inicio, g.fim)).match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu)?.length ?? 0
+}
+
+/** “sombra” 3× em 24 palavras */
+export function mensagemRepeticao(md: string, g: GrupoRepeticao): string {
+  return `“${g.palavra.toLowerCase()}” ${g.ocorrencias.length}× em ${palavrasNoGrupo(md, g)} palavras`
+}
+
+/**
+ * Repetição próxima para o Revisor: um card por grupo (sem limite), em ordem
+ * do texto. Só aponta (`soAviso`): o autor decide como variar. `original` é o
+ * trecho da primeira à última ocorrência; `marcas` aponta cada ocorrência.
+ * Grupos longos demais para exibir (> 400 caracteres) ficam de fora.
+ * As decisões "manter palavra" são aplicadas depois (shared/decisoes.ts),
+ * pela `palavra`.
+ */
+export function repeticoesRevisor(md: string, janela = 30): Sugestao[] {
+  const out: Sugestao[] = []
+  for (const g of gruposRepeticao(md, janela)) {
+    if (g.fim - g.inicio > 400) continue
+    const original = md.slice(g.inicio, g.fim)
+    const { antes, depois } = contexto(md, g.inicio, original.length)
+    out.push({
+      id: `rp-${g.inicio}-${g.chave}`,
+      categoria: 'repeticao',
+      motivo: mensagemRepeticao(md, g),
+      original,
+      substituto: original,
+      antes,
+      depois,
+      palavra: g.palavra.toLowerCase(),
+      soAviso: true,
+      marcas: g.ocorrencias.map((o): [number, number] => [o.pos - g.inicio, o.pos - g.inicio + o.texto.length])
+    })
+  }
+  return out
 }

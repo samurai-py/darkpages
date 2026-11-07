@@ -10,8 +10,49 @@ export type MiniIcone =
   | 'importar' | 'arrastar' | 'capitulo' | 'ligar'
   | 'personagem' | 'lugar' | 'objeto' | 'grupo' | 'divindade'
   | 'cena' | 'virada' | 'ideia' | 'local'
+  | 'provisorio' | 'canonico' | 'descartar' | 'memoria' | 'travar'
 
 const P: Record<MiniIcone, ReactElement> = {
+  /** ideia da IA ainda não aceita: contorno tracejado + faísca */
+  provisorio: (
+    <>
+      <rect x="4" y="5" width="13" height="14" rx="2.2" strokeDasharray="2.4 2.2" />
+      <path d="M17.5 3.2l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z" {...A} />
+      <path d="M7.5 10h6M7.5 13.5h4" />
+    </>
+  ),
+  /** carimbo: vira plano do livro */
+  canonico: (
+    <>
+      <path d="M12 3.5l2.2 1.6 2.7-.1.8 2.6 2.2 1.6-.9 2.6.9 2.6-2.2 1.6-.8 2.6-2.7-.1L12 20.5l-2.2-1.6-2.7.1-.8-2.6-2.2-1.6.9-2.6-.9-2.6 2.2-1.6.8-2.6 2.7.1z" {...D} />
+      <path d="M12 3.5l2.2 1.6 2.7-.1.8 2.6 2.2 1.6-.9 2.6.9 2.6-2.2 1.6-.8 2.6-2.7-.1L12 20.5l-2.2-1.6-2.7.1-.8-2.6-2.2-1.6.9-2.6-.9-2.6 2.2-1.6.8-2.6 2.7.1z" />
+      <path d="M8.8 12.2l2.2 2.2 4.2-4.6" style={{ stroke: 'var(--acc)' }} />
+    </>
+  ),
+  descartar: (
+    <>
+      <rect x="4.5" y="5" width="15" height="14" rx="2.2" {...D} />
+      <rect x="4.5" y="5" width="15" height="14" rx="2.2" />
+      <path d="M3.5 20.5l17-17" style={{ stroke: 'var(--alert)' }} />
+    </>
+  ),
+  /** memória do livro: páginas empilhadas com fita marcadora */
+  memoria: (
+    <>
+      <path d="M6.5 4.5h10a1.5 1.5 0 011.5 1.5v13.5H8a1.5 1.5 0 01-1.5-1.5z" {...D} />
+      <path d="M6.5 18V4.5h10a1.5 1.5 0 011.5 1.5v13.5H8a1.5 1.5 0 01-1.5-1.5zM6.5 18a1.5 1.5 0 011.5-1.5h10" />
+      <path d="M12.5 4.5v6l1.6-1.2 1.6 1.2v-6" {...A} />
+    </>
+  ),
+  /** cadeado: resumo editado pelo autor */
+  travar: (
+    <>
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" {...D} />
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" />
+      <circle cx="12" cy="15.2" r="1.2" {...A} />
+    </>
+  ),
   busca: (
     <>
       <circle cx="10.5" cy="10.5" r="6" {...D} />

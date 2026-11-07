@@ -3,7 +3,7 @@ import type { ChapterInfo, ChapterKind } from '../../../../shared/types'
 import { Ico } from './icones'
 import { Modal } from './Modal'
 import { fmt } from './texto'
-import { DEFAULT_ROTULO, romano, rotuloTela, type RotuloCfg } from '../../../../shared/rotulo'
+import { comoNumeracao, dentroDeParte, numerarItens, romano, rotuloTela, type Numeracao, type RotuloCfg } from '../../../../shared/rotulo'
 
 export interface Metas {
   metaCapitulo: number
@@ -19,14 +19,16 @@ interface Props {
   onMetas: (m: Metas) => void
   onAbrir: (file: string) => void
   onCriar: (titulo: string) => Promise<void>
+  /** cria uma parte antes do capítulo aberto (ou no fim, sem capítulo aberto) */
+  onCriarParte: (titulo: string) => Promise<void>
   onRenomear: (file: string, titulo: string) => Promise<void>
   onMover: (ordem: string[]) => Promise<void>
   onTipo: (file: string, k: ChapterKind) => Promise<void>
   onExcluir: (file: string) => Promise<void>
   onImportar: () => void
   onExportar: () => void
-  /** nome dos capítulos do livro */
-  rotulo: RotuloCfg
+  /** nome dos capítulos e das partes do livro (e se a numeração recomeça por parte) */
+  rotulo: RotuloCfg | Numeracao
   /** abre o seletor "Nome dos capítulos…" */
   onNomeCapitulos: () => void
   /** abre a lixeira (Versões) para recuperar capítulos excluídos */
@@ -34,26 +36,32 @@ interface Props {
 }
 
 /** Número curto na coluna (algarismo, ou romano quando o livro usa romanos). */
-export function rotuloCurto(caps: ChapterInfo[], i: number, cfg: RotuloCfg = DEFAULT_ROTULO): string {
+export function rotuloCurto(caps: ChapterInfo[], i: number, cfg?: RotuloCfg | Numeracao): string {
   const c = caps[i]
   if (!c) return ''
   if (c.kind === 'prologo') return 'Pról.'
   if (c.kind === 'epilogo') return 'Epíl.'
-  const n = caps.slice(0, i + 1).filter((x) => x.kind === 'capitulo').length
-  return cfg.estilo === 'romano' || cfg.estilo === 'romano-palavra' ? romano(n) : String(n)
+  const num = comoNumeracao(cfg)
+  const n = numerarItens(caps.slice(0, i + 1), num.reiniciar)[i] ?? 0
+  const r = c.kind === 'parte' ? num.parte : num.rotulo
+  return r.estilo === 'romano' || r.estilo === 'romano-palavra' ? romano(n) : String(n)
 }
 
-/** Rótulo completo ("Capítulo um", "Primeiro Círculo", "Prólogo"), em caixa normal. */
-export function rotuloLongo(caps: ChapterInfo[], file: string, cfg: RotuloCfg = DEFAULT_ROTULO): string {
+/** Rótulo completo ("Capítulo um", "Primeiro Círculo", "Prólogo", "Parte um"), em caixa normal. */
+export function rotuloLongo(caps: ChapterInfo[], file: string, cfg?: RotuloCfg | Numeracao): string {
   const i = caps.findIndex((c) => c.file === file)
   const c = caps[i]
   if (!c) return ''
-  const n = caps.slice(0, i + 1).filter((x) => x.kind === 'capitulo').length
-  return rotuloTela(c.kind, n, cfg) ?? ''
+  const num = comoNumeracao(cfg)
+  const n = numerarItens(caps.slice(0, i + 1), num.reiniciar)[i] ?? 0
+  return rotuloTela(c.kind, n, num.rotulo, num.parte) ?? ''
 }
+
+const NOME_TIPO: Record<ChapterKind, string> = { capitulo: 'Capítulo', prologo: 'Prólogo', epilogo: 'Epílogo', parte: 'Parte' }
 
 export function ChapterList(p: Props): ReactElement {
   const [novo, setNovo] = useState<string | null>(null)
+  const [novoParte, setNovoParte] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
   const [menuCol, setMenuCol] = useState(false)
   const [renomeando, setRenomeando] = useState<{ file: string; titulo: string } | null>(null)
@@ -65,6 +73,7 @@ export function ChapterList(p: Props): ReactElement {
   const [erro, setErro] = useState<string | null>(null)
 
   const caps = p.capitulos
+  const emParte = dentroDeParte(caps)
   const palavras = (c: ChapterInfo): number => (c.file === p.atual ? p.palavrasAtual : c.words)
   const total = caps.reduce((s, c) => s + palavras(c), 0)
   const pct = p.metas.metaLivro > 0 ? Math.min(1, total / p.metas.metaLivro) : 0
@@ -107,8 +116,9 @@ export function ChapterList(p: Props): ReactElement {
     const t = novo?.trim()
     if (!t) return
     void run(async () => {
-      await p.onCriar(t)
+      await (novoParte ? p.onCriarParte(t) : p.onCriar(t))
       setNovo(null)
+      setNovoParte(false)
     })
   }
 
@@ -126,13 +136,24 @@ export function ChapterList(p: Props): ReactElement {
           >
             <Ico n="menu" size={16} />
           </button>
-          <button type="button" className="ms-ib ms-ib-acc" aria-label="Novo capítulo" onClick={() => setNovo((v) => (v === null ? '' : null))}>
+          <button
+            type="button"
+            className="ms-ib ms-ib-acc"
+            aria-label="Novo capítulo"
+            onClick={() => {
+              setNovoParte(false)
+              setNovo((v) => (v === null || novoParte ? '' : null))
+            }}
+          >
             <Ico n="mais" size={16} />
           </button>
           {menuCol && (
             <div className="ms-menu panel ms-menu-col" role="menu" onKeyDown={(e) => e.key === 'Escape' && setMenuCol(false)}>
+              <button type="button" role="menuitem" onClick={() => (setMenuCol(false), setNovoParte(true), setNovo(''))}>
+                <Ico n="mais" size={14} /> Nova parte…
+              </button>
               <button type="button" role="menuitem" onClick={() => (setMenuCol(false), p.onNomeCapitulos())}>
-                <Ico n="lapis" size={14} /> Nome dos capítulos…
+                <Ico n="lapis" size={14} /> Nome dos capítulos e partes…
               </button>
               {p.onLixeira && (
                 <button type="button" role="menuitem" onClick={() => (setMenuCol(false), p.onLixeira?.())}>
@@ -147,16 +168,17 @@ export function ChapterList(p: Props): ReactElement {
       {novo !== null && (
         <form className="ms-novo" onSubmit={criar}>
           <label className="ms-sr" htmlFor="ms-novo-t">
-            Título do novo capítulo
+            {novoParte ? 'Título da nova parte (entra antes do capítulo aberto)' : 'Título do novo capítulo'}
           </label>
           <input
             id="ms-novo-t"
             className="input"
             autoFocus
-            placeholder="Título do novo capítulo"
+            placeholder={novoParte ? 'Título da nova parte' : 'Título do novo capítulo'}
+            title={novoParte ? 'A parte entra antes do capítulo aberto; os capítulos seguintes passam a pertencer a ela.' : undefined}
             value={novo}
             onChange={(e) => setNovo(e.target.value)}
-            onKeyDown={(e) => e.key === 'Escape' && setNovo(null)}
+            onKeyDown={(e) => e.key === 'Escape' && (setNovo(null), setNovoParte(false))}
           />
           <button type="submit" className="btn sm pri" disabled={!novo.trim() || ocupado}>
             Criar
@@ -170,6 +192,9 @@ export function ChapterList(p: Props): ReactElement {
           const prog = p.metas.metaCapitulo > 0 ? Math.min(1, w / p.metas.metaCapitulo) : 0
           const aberto = menu === c.file
           const cls = ['ms-ch']
+          const parte = c.kind === 'parte'
+          if (parte) cls.push('ms-parte')
+          else if (emParte[i]) cls.push('em-parte')
           if (arrastando === c.file) cls.push('drag')
           if (alvo?.file === c.file) cls.push(alvo.antes ? 'alvo-antes' : 'alvo-depois')
           return (
@@ -236,23 +261,32 @@ export function ChapterList(p: Props): ReactElement {
                     onClick={() => p.onAbrir(c.file)}
                     onDoubleClick={() => setRenomeando({ file: c.file, titulo: c.title })}
                   >
-                    <span className={`ms-ch-n${c.kind !== 'capitulo' ? ' esp' : ''}`} title={rotuloLongo(caps, c.file, p.rotulo)}>
-                      {rotuloCurto(caps, i, p.rotulo)}
-                    </span>
-                    <span className="ms-ch-m">
-                      <span className="ms-ch-t">{c.title}</span>
-                      <span
-                        className="ms-bar"
-                        role="progressbar"
-                        aria-label={`Progresso de ${c.title}`}
-                        aria-valuemin={0}
-                        aria-valuemax={p.metas.metaCapitulo}
-                        aria-valuenow={w}
-                      >
-                        <span style={{ width: `${prog * 100}%` }} />
-                      </span>
-                    </span>
-                    <span className="ms-ch-w">{fmt(w)}</span>
+                    {parte ? (
+                      <>
+                        <span className="ms-parte-r">{rotuloLongo(caps, c.file, p.rotulo) || 'Parte'}</span>
+                        <span className="ms-ch-t">{c.title}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={`ms-ch-n${c.kind !== 'capitulo' ? ' esp' : ''}`} title={rotuloLongo(caps, c.file, p.rotulo)}>
+                          {rotuloCurto(caps, i, p.rotulo)}
+                        </span>
+                        <span className="ms-ch-m">
+                          <span className="ms-ch-t">{c.title}</span>
+                          <span
+                            className="ms-bar"
+                            role="progressbar"
+                            aria-label={`Progresso de ${c.title}`}
+                            aria-valuemin={0}
+                            aria-valuemax={p.metas.metaCapitulo}
+                            aria-valuenow={w}
+                          >
+                            <span style={{ width: `${prog * 100}%` }} />
+                          </span>
+                        </span>
+                        <span className="ms-ch-w">{fmt(w)}</span>
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -275,7 +309,7 @@ export function ChapterList(p: Props): ReactElement {
                         <Ico n="descer" size={14} /> Descer
                       </button>
                       <span className="ms-menu-sep" />
-                      {(['capitulo', 'prologo', 'epilogo'] as ChapterKind[]).map((k) => (
+                      {(['capitulo', 'prologo', 'epilogo', 'parte'] as ChapterKind[]).map((k) => (
                         <button
                           key={k}
                           type="button"
@@ -285,7 +319,7 @@ export function ChapterList(p: Props): ReactElement {
                           onClick={() => c.kind !== k && void run(() => p.onTipo(c.file, k))}
                         >
                           <span className="ms-radio" aria-hidden="true" />
-                          {k === 'capitulo' ? 'Capítulo' : k === 'prologo' ? 'Prólogo' : 'Epílogo'}
+                          {NOME_TIPO[k]}
                         </button>
                       ))}
                       <span className="ms-menu-sep" />
@@ -343,7 +377,7 @@ export function ChapterList(p: Props): ReactElement {
       {editMetas && <MetasForm metas={p.metas} onClose={() => setEditMetas(false)} onSave={(m) => (p.onMetas(m), setEditMetas(false))} />}
 
       {excluir && (
-        <Modal titulo="Excluir capítulo" onClose={() => setExcluir(null)}>
+        <Modal titulo={excluir.kind === 'parte' ? 'Excluir parte' : 'Excluir capítulo'} onClose={() => setExcluir(null)}>
           <ConfirmaExcluir
             cap={excluir}
             onCancel={() => setExcluir(null)}

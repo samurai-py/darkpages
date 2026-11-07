@@ -1,7 +1,7 @@
 import { bookDir, type Handlers } from '../api/context'
 import { getDoc, newId, putDoc } from '../store/docs'
 import { desligarDosMapas } from './mapas'
-import type { Cartao, CartaoTipo, EnredoBoard, Ligacao } from '../../shared/models'
+import type { Cartao, CartaoEstado, CartaoTipo, EnredoBoard, Ligacao } from '../../shared/models'
 
 /**
  * Enredo (E1–E5): quadro único na coleção "enredo", documento "board".
@@ -12,6 +12,7 @@ import type { Cartao, CartaoTipo, EnredoBoard, Ligacao } from '../../shared/mode
 const COLECAO = 'enredo'
 const DOC = 'board'
 const TIPOS: CartaoTipo[] = ['cena', 'virada', 'personagem', 'ideia', 'local']
+const ESTADOS: CartaoEstado[] = ['canonico', 'provisorio', 'descartado']
 const CAPITULO = /^\d{3}-[a-z0-9-]+\.md$/
 const ID = /^[a-z0-9][a-z0-9-]{0,80}$/
 const MAX_CARTOES = 5000
@@ -40,6 +41,9 @@ function cartao(v: unknown): Cartao | null {
       : [],
     x: numero(c.x),
     y: numero(c.y),
+    // legado (sem campo) = do autor e canônico
+    origem: c.origem === 'ia' ? 'ia' : 'autor',
+    estado: ESTADOS.includes(c.estado as CartaoEstado) ? (c.estado as CartaoEstado) : 'canonico',
     criadoEm: texto(c.criadoEm, 40) || new Date().toISOString()
   }
   const cap = texto(c.capitulo, 200)
@@ -99,10 +103,12 @@ export const handlers: Handlers = {
   },
 
   /**
-   * 'enredo.adicionarCartao'(dir, { tipo, titulo, texto, capitulo?, fichas? }) → Cartao criado.
+   * 'enredo.adicionarCartao'(dir, { tipo, titulo, texto, capitulo?, fichas?, origem? }) → Cartao criado.
    * Para quem cria cartão fora da tela do Enredo (Inspector, Insights): lê o
    * quadro atual, posiciona o cartão, põe no fim do roteiro do capítulo e
    * grava saneado — sem a interface reenviar o quadro inteiro.
+   * Sem `origem: 'autor'`, o cartão é tratado como sugestão da IA: origem "ia"
+   * e estado "provisorio" (o autor torna canônico no Enredo).
    */
   'enredo.adicionarCartao': async (ctx, dir, dados): Promise<Cartao> => {
     const d = await bookDir(ctx, dir)
@@ -121,6 +127,8 @@ export const handlers: Handlers = {
       x: 60 + (n % 5) * 260,
       y: 60 + Math.floor(n / 5) * 200,
       criadoEm: new Date().toISOString(),
+      origem: o.origem === 'autor' ? 'autor' : 'ia',
+      estado: o.origem === 'autor' ? 'canonico' : 'provisorio',
       ...(CAPITULO.test(cap) ? { capitulo: cap, ordem: board.cartoes.filter((c) => c.capitulo === cap).length } : {})
     })
     if (!novo) throw new Error('Cartão inválido')

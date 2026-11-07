@@ -31,6 +31,8 @@ export function novoCartao(tipo: CartaoTipo, x: number, y: number, extra: Partia
     fichas: [],
     x: Math.round(x),
     y: Math.round(y),
+    origem: 'autor',
+    estado: 'canonico',
     criadoEm: new Date().toISOString(),
     ...extra
   }
@@ -45,6 +47,7 @@ export function rotuloCapitulo(chapters: ChapterInfo[], file: string | undefined
     if (c.file === file) {
       if (c.kind === 'prologo') return 'Prólogo'
       if (c.kind === 'epilogo') return 'Epílogo'
+      if (c.kind === 'parte') return 'Parte'
       return `cap. ${n}`
     }
   }

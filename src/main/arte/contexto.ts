@@ -147,6 +147,7 @@ function rotuloCapitulo(p: Project, file: string, titulo: string): string {
   const info = p.chapters.find((c) => c.file === file)
   if (info?.kind === 'prologo') return `Prólogo · ${titulo}`
   if (info?.kind === 'epilogo') return `Epílogo · ${titulo}`
+  if (info?.kind === 'parte') return `Parte · ${titulo}`
   const n = Number(file.slice(0, 3))
   return `Cap. ${n} · ${titulo}`
 }

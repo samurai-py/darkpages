@@ -13,6 +13,7 @@ import {
 } from '../features/universo/fichas'
 import { FichaPanel } from '../features/universo/FichaPanel'
 import { ImportarSerie } from '../features/universo/ImportarSerie'
+import { PerfilObra } from '../features/universo/PerfilObra'
 import { Mini } from '../features/universo/icons'
 import { Retrato, definirRetrato, esquecerRetratos, imagemParaPng, useRetratos } from '../features/universo/Retrato'
 import { desligarDoEnredo } from '../features/universo/remover'
@@ -33,6 +34,7 @@ export function Universo({ project, go, params }: ScreenProps): ReactElement {
   const [pendentes, setPendentes] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState('')
   const [importando, setImportando] = useState(false)
+  const [perfil, setPerfil] = useState(false)
   const [aviso, setAviso] = useState('')
 
   // ---------- autosave por ficha (debounce + fila por id) ----------
@@ -247,6 +249,9 @@ export function Universo({ project, go, params }: ScreenProps): ReactElement {
               onChange={(e) => setBusca(e.target.value)}
             />
           </label>
+          <button type="button" className="btn" onClick={() => setPerfil(true)} title="Como a IA deve ler este livro">
+            <Mini name="faisca" /> Perfil da obra
+          </button>
           <button type="button" className="btn" onClick={() => setImportando(true)}>
             <Mini name="importar" /> Da série
           </button>
@@ -355,6 +360,8 @@ export function Universo({ project, go, params }: ScreenProps): ReactElement {
           onFechar={() => setAbertaId(null)}
         />
       )}
+
+      {perfil && <PerfilObra dir={dir} onFechar={() => setPerfil(false)} />}
 
       {importando && (
         <ImportarSerie

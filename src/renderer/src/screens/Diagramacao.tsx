@@ -275,40 +275,44 @@ export function Diagramacao({ project, onProject, params }: ScreenProps): ReactE
         <div className="dg-body" role="tabpanel" id="dg-panel-miolo" aria-labelledby="dg-tab-miolo">
           <aside className="dg-chs" aria-label="Capítulos na diagramação">
             <span className="dg-eb">
-              {project.chapters.length} capítulos{total ? ` · ${total} págs` : ''}
+              {project.chapters.filter((c) => c.kind !== 'parte').length} capítulos{total ? ` · ${total} págs` : ''}
             </span>
             {project.chapters.map((c) => {
               const own = l.chapters[c.file] ?? {}
               const p = pageOf(c.file)
               return (
-                <div key={c.file} className="dg-ch" data-atual={currentChapter === c.file}>
+                <div key={c.file} className={`dg-ch${c.kind === 'parte' ? ' dg-parte' : ''}`} data-atual={currentChapter === c.file}>
                   <button type="button" className="dg-ch-go" disabled={p === undefined} onClick={() => p !== undefined && go(p)} aria-label={`Ir para ${c.title}${p ? `, página ${p}` : ''}`}>
-                    <b>{c.title}</b>
+                    <b>{c.kind === 'parte' ? <><small>Parte · </small>{c.title}</> : c.title}</b>
                     <span>{p !== undefined ? `p. ${p}` : '…'}</span>
                   </button>
                   <div className="dg-ch-opts">
-                    <select
-                      className="dg-mini"
-                      aria-label={`Abertura de ${c.title}`}
-                      value={own.opening ?? ''}
-                      onChange={(e) => setChapter(c.file, { opening: (e.target.value || undefined) as ChapterLayout['opening'] })}
-                    >
-                      <option value="">Abertura: padrão</option>
-                      {OPENINGS.map((o) => (
-                        <option key={o.v} value={o.v}>Abertura: {o.label.toLowerCase()}</option>
-                      ))}
-                    </select>
-                    <select
-                      className="dg-mini"
-                      aria-label={`Capitular de ${c.title}`}
-                      value={own.dropCap ?? ''}
-                      onChange={(e) => setChapter(c.file, { dropCap: (e.target.value || undefined) as ChapterLayout['dropCap'] })}
-                    >
-                      <option value="">Capitular: padrão</option>
-                      {DROPCAPS.map((o) => (
-                        <option key={o.v} value={o.v}>{o.label.startsWith('Sem') ? 'Sem capitular' : `Capitular: ${o.label.replace('Capitular ', '')}`}</option>
-                      ))}
-                    </select>
+                    {c.kind !== 'parte' && (
+                      <>
+                        <select
+                          className="dg-mini"
+                          aria-label={`Abertura de ${c.title}`}
+                          value={own.opening ?? ''}
+                          onChange={(e) => setChapter(c.file, { opening: (e.target.value || undefined) as ChapterLayout['opening'] })}
+                        >
+                          <option value="">Abertura: padrão</option>
+                          {OPENINGS.map((o) => (
+                            <option key={o.v} value={o.v}>Abertura: {o.label.toLowerCase()}</option>
+                          ))}
+                        </select>
+                        <select
+                          className="dg-mini"
+                          aria-label={`Capitular de ${c.title}`}
+                          value={own.dropCap ?? ''}
+                          onChange={(e) => setChapter(c.file, { dropCap: (e.target.value || undefined) as ChapterLayout['dropCap'] })}
+                        >
+                          <option value="">Capitular: padrão</option>
+                          {DROPCAPS.map((o) => (
+                            <option key={o.v} value={o.v}>{o.label.startsWith('Sem') ? 'Sem capitular' : `Capitular: ${o.label.replace('Capitular ', '')}`}</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
                     <button
                       type="button"
                       className="dg-mini dg-epi-btn"

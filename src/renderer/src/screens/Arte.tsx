@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
-import { resolveRotulo } from '../../../shared/rotulo'
+import { resolveNumeracao } from '../../../shared/rotulo'
 import { rotuloLongo } from '../features/manuscrito/ChapterList'
 import type { ScreenProps } from '../screen'
 import { folio } from '../api'
@@ -219,7 +219,7 @@ export function Arte({ project, go, params }: ScreenProps): ReactElement {
   }, [alvoChave, versaoAlvo, alvo, montar])
 
   const caps = project.chapters
-  const rotuloCfg = resolveRotulo(project.meta.layout)
+  const rotuloCfg = resolveNumeracao(project.meta.layout)
   const rotuloCap = (file: string): string => rotuloLongo(caps, file, rotuloCfg)
   const capsProntos = caps.filter((c) => geradas[`abertura:${c.file}`]).length
   const capsPendentes = caps.filter((c) => {

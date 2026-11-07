@@ -38,7 +38,7 @@ export function EbookTab({ project, l, flush }: Props): ReactElement {
     f.dedicatoria && f.dedicatoriaTexto.trim() ? 'Dedicatória' : null,
     f.epigrafe && f.epigrafeTexto.trim() ? 'Epígrafe' : null,
     'Sumário navegável',
-    `${project.chapters.length} capítulos, com notas no fim de cada um, epígrafes e imagens com legenda`,
+    `${project.chapters.filter((c) => c.kind !== 'parte').length} capítulos${project.chapters.some((c) => c.kind === 'parte') ? ' em partes' : ''}, com notas no fim de cada um, epígrafes e imagens com legenda`,
     f.posfacio && f.posfacioTexto.trim() ? 'Posfácio' : null,
     f.agradecimentos && f.agradecimentosTexto.trim() ? 'Agradecimentos' : null,
     f.sobreAutor && (f.sobreAutorTexto.trim() || f.sobreAutorFoto) ? 'Sobre o autor' : null,

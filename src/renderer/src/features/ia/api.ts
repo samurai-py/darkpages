@@ -1,5 +1,16 @@
 import { call } from '../../api'
-import type { BetaLeitura, Conflito, IdeiasResult, ProativoEstado, ProativoSettings, SinonimosResult, Sugestao } from '../../../../shared/models'
+import type {
+  BetaLeitura,
+  Conflito,
+  DecisaoRevisao,
+  IdeiasResult,
+  PerfilObra,
+  ProativoEstado,
+  ProativoSettings,
+  RitmoComparado,
+  SinonimosResult,
+  Sugestao
+} from '../../../../shared/models'
 
 /** Chamadas tipadas da feature IA (métodos "ia.*" do processo principal). */
 
@@ -93,17 +104,27 @@ export const ia = {
   modelosClaudeCli: () => call<string[]>('ia.modelosClaudeCli'),
   modelosCodex: () => call<ModeloCodex[]>('ia.modelosCodex'),
   redigir: (dir: string, file: string, ideia: { tipo: string; texto: string }, contexto: { antes: string; depois?: string }, instrucao?: string) =>
-    call<{ texto: string }>('ia.redigir', dir, file, ideia, contexto, instrucao ?? ''),
+    call<{ texto: string; avisos?: string[] }>('ia.redigir', dir, file, ideia, contexto, instrucao ?? ''),
   salvarRevisor: (patch: RevisorSettings) => call<RevisorSettings>('ia.salvarAjustes', 'revisor', patch),
   ideias: (dir: string, file: string, pedido?: string) => call<IdeiasResult>('ia.ideias', dir, file, pedido ?? ''),
   sinonimos: (palavra: string, frase: string) => call<SinonimosResult>('ia.sinonimos', palavra, frase),
   continuidade: (dir: string, file: string) => call<Conflito[]>('ia.continuidade', dir, file),
   beta: (dir: string, file: string) => call<BetaLeitura>('ia.beta', dir, file),
   betaGet: (dir: string, file: string) => call<BetaLeitura | null>('ia.betaGet', dir, file),
-  resumo: (dir: string, file: string) => call<{ resumo: string }>('ia.resumo', dir, file),
+  resumo: (dir: string, file: string) => call<{ resumo: string; travado: boolean; desatualizado: boolean }>('ia.resumo', dir, file),
   revisar: (dir: string, file: string) => call<Sugestao[]>('ia.revisar', dir, file),
   revisarDetalhado: (dir: string, file: string) => call<RevisaoDetalhada>('ia.revisarDetalhado', dir, file),
   revisaoGet: (dir: string, file: string) => call<RevisaoDetalhada | null>('ia.revisaoGet', dir, file),
-  aplicar: (dir: string, file: string, alvo: string[] | Array<{ original: string; substituto: string; antes?: string; depois?: string }>) =>
-    call<ResultadoAplicar>('ia.aplicar', dir, file, alvo)
+  /** ids das sugestões; `{ id, substituto }` escolhe uma das alternativas da sugestão */
+  aplicar: (
+    dir: string,
+    file: string,
+    alvo: Array<string | { id: string; substituto: string }> | Array<{ original: string; substituto: string; antes?: string; depois?: string }>
+  ) => call<ResultadoAplicar>('ia.aplicar', dir, file, alvo),
+  decisoes: (dir: string) => call<DecisaoRevisao[]>('revisao.decisoes', dir),
+  decidir: (dir: string, d: Pick<DecisaoRevisao, 'tipo' | 'valor'> & { capitulo?: string; rotulo?: string }) => call<DecisaoRevisao[]>('revisao.decidir', dir, d),
+  esquecerDecisao: (dir: string, id: string) => call<DecisaoRevisao[]>('revisao.esquecer', dir, id),
+  ritmo: (dir: string, file: string) => call<RitmoComparado>('revisao.ritmo', dir, file),
+  perfil: (dir: string) => call<PerfilObra>('livro.perfil', dir),
+  salvarPerfil: (dir: string, patch: Partial<PerfilObra>) => call<PerfilObra>('livro.salvarPerfil', dir, patch)
 }

@@ -40,6 +40,8 @@
 }
 .dg-ch-go b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dg-ch-go span { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.dg-ch.dg-parte { border-top: 1px solid var(--line); margin-top: 6px; }
+.dg-ch.dg-parte .dg-ch-go small { font-weight: 400; font-size: .78em; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
 .dg-ch-opts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .dg-mini {
   font: inherit; font-size: 11px; color: var(--text); background: var(--chipbg); border: 1px solid transparent;

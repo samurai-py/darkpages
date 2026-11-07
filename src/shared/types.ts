@@ -47,6 +47,10 @@ export interface LayoutSettings {
   chapterLabel?: ChapterLabel
   /** nome dos capítulos do livro (estilo, palavra, gênero, caixa, modelo) — ver shared/rotulo.ts */
   rotulo?: import('./rotulo').RotuloCfg
+  /** nome das partes do livro ("Parte um", "Livro I"…) — ver shared/rotulo.ts */
+  rotuloParte?: import('./rotulo').RotuloCfg
+  /** a numeração dos capítulos recomeça em 1 a cada parte (padrão: continua) */
+  reiniciarNumeracao?: boolean
   /** cabeçalho corrente: título do livro nas pares, do capítulo nas ímpares */
   runningHead?: boolean
   /** posição do número de página */
@@ -134,7 +138,12 @@ export interface ProjectMeta {
   layout: LayoutSettings
 }
 
-export type ChapterKind = 'capitulo' | 'prologo' | 'epilogo'
+/**
+ * 'parte' = divisão do livro ("Parte um", "Livro I"): um item da ordem do
+ * manuscrito com título e texto curto opcional; os capítulos seguintes
+ * pertencem a ela até a próxima parte. Não conta na numeração dos capítulos.
+ */
+export type ChapterKind = 'capitulo' | 'prologo' | 'epilogo' | 'parte'
 
 export interface ChapterInfo {
   /** nome do arquivo dentro de manuscrito/ (ex.: 001-o-ultimo-sino.md). Muda ao reordenar. */

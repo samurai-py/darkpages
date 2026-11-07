@@ -4,6 +4,7 @@ import type { ChapterInfo } from '../../../../shared/types'
 import { Mini } from '../universo/icons'
 import { arrastavel, soltavel } from './arrastar'
 import { doCapitulo, rotuloCapitulo, vizinho } from './board'
+import { Selo } from './Selo'
 
 export interface RoteiroProps {
   board: EnredoBoard
@@ -76,7 +77,7 @@ export function Roteiro(props: RoteiroProps): ReactElement {
               return (
                 <li
                   key={c.id}
-                  className={`en-rrow${c.id === selId ? ' sel' : ''}${sobre === `row:${c.id}` ? ' drop' : ''}`}
+                  className={`en-rrow es-${c.estado}${c.id === selId ? ' sel' : ''}${sobre === `row:${c.id}` ? ' drop' : ''}`}
                   {...arrastavel(c.id)}
                   {...soltavel(`row:${c.id}`, setSobre, (id) => props.onMover(id, g.cap, c.id))}
                 >
@@ -85,7 +86,10 @@ export function Roteiro(props: RoteiroProps): ReactElement {
                   </span>
                   <span className="en-rn">{n}</span>
                   <button type="button" className="en-rbody" onClick={() => props.onSel(c.id)} aria-current={c.id === selId ? 'true' : undefined}>
-                    <span className="disp en-rt">{c.titulo || 'Cena sem título'}</span>
+                    <span className="en-rtl">
+                      <span className="disp en-rt">{c.titulo || 'Cena sem título'}</span>
+                      <Selo c={c} />
+                    </span>
                     {c.texto && <span className="en-rx">{c.texto}</span>}
                     {ligadas.length > 0 && (
                       <span className="en-fichas">

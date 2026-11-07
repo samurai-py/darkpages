@@ -66,6 +66,13 @@
 .ms-bar { height: 2px; border-radius: 2px; background: var(--line); overflow: hidden; display: block; }
 .ms-bar > span { display: block; height: 100%; background: var(--acc); border-radius: 2px; transition: width .6s var(--ease); }
 .ms-ch-w { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* parte: cabeçalho de grupo (capítulos seguintes pertencem a ela) */
+.ms-ch.ms-parte { margin-top: 10px; border-top: 1px solid var(--line); border-radius: 0; }
+.ms-ch.ms-parte:first-child { margin-top: 0; border-top: 0; }
+.ms-ch.ms-parte .ms-ch-b { flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 4px 8px 10px; }
+.ms-parte-r { font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--acc); }
+.ms-ch.ms-parte .ms-ch-t { font-style: normal; font-size: 16.5px; letter-spacing: .01em; max-width: 100%; }
+.ms-ch.em-parte .ms-ch-b { padding-left: 18px; }
 .ms-ch-menu { opacity: 0; margin-right: 2px; }
 .ms-ch:hover .ms-ch-menu, .ms-ch-menu:focus-visible, .ms-ch-menu[aria-expanded='true'] { opacity: 1; }
 .ms-menu {
@@ -342,6 +349,9 @@
 .ms-previa li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--rad); }
 .ms-previa li.off { opacity: .5; }
 .ms-check { accent-color: var(--acc); width: 18px; height: 18px; margin-top: 4px; flex: none; }
+.ms-check-l { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; cursor: pointer; }
+.ms-check-l .ms-check { margin-top: 1px; }
+.ms-modal-sub { margin: 6px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .ms-previa-m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .ms-previa-l { display: flex; justify-content: space-between; gap: 8px; }
 .ms-previa-m .input { min-height: 36px; font-family: var(--fb); font-size: 15px; }

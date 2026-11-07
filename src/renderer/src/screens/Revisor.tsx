@@ -4,9 +4,11 @@ import { rotuloLongo } from '../features/manuscrito/ChapterList'
 import type { ScreenProps } from '../screen'
 import type { ChapterInfo } from '../../../shared/types'
 import { folio } from '../api'
-import type { BetaLeitura, Sugestao, SugestaoCategoria } from '../../../shared/models'
+import type { BetaLeitura, DecisaoRevisao, RitmoComparado, Sugestao, SugestaoCategoria } from '../../../shared/models'
+import { decisaoPara, filtrarSugestoes } from '../../../shared/decisoes'
 import { ia, type StatusIa } from '../features/ia/api'
 import { Ico } from '../features/ia/icones'
+import { Ritmo } from '../features/ia/Ritmo'
 import './revisor.css'
 
 type Estado = 'pendente' | 'aplicando' | 'aceita' | 'ignorada'
@@ -20,6 +22,26 @@ const CATS: Array<{ id: SugestaoCategoria; nome: string }> = [
   { id: 'continuidade', nome: 'Continuidade' }
 ]
 const NOME_CAT = Object.fromEntries(CATS.map((c) => [c.id, c.nome])) as Record<SugestaoCategoria, string>
+
+const TIPO_DECISAO: Record<DecisaoRevisao['tipo'], string> = {
+  'manter-palavra': 'Palavra',
+  'manter-trecho': 'Trecho',
+  'ignorar-regra': 'Regra',
+  continuidade: 'Continuidade'
+}
+
+/** Trecho com as ocorrências marcadas (repetição local). */
+function ComMarcas({ texto, marcas }: { texto: string; marcas: Array<[number, number]> }): ReactElement {
+  const partes: ReactElement[] = []
+  let i = 0
+  marcas.forEach(([a, b], k) => {
+    if (a > i) partes.push(<span key={`t${k}`}>{texto.slice(i, a)}</span>)
+    partes.push(<mark key={`m${k}`}>{texto.slice(a, b)}</mark>)
+    i = b
+  })
+  if (i < texto.length) partes.push(<span key="fim">{texto.slice(i)}</span>)
+  return <>{partes}</>
+}
 
 const NOTAS: Array<{ k: keyof BetaLeitura['notas']; nome: string }> = [
   { k: 'ritmo', nome: 'Ritmo' },
@@ -72,6 +94,11 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
   const [betaLoad, setBetaLoad] = useState(false)
   const [betaErr, setBetaErr] = useState('')
   const [anuncio, setAnuncio] = useState('')
+  /** card com a escolha "Só agora" × "Sempre manter" aberta */
+  const [escolha, setEscolha] = useState<string | null>(null)
+  const [decisoes, setDecisoes] = useState<DecisaoRevisao[]>([])
+  const [verDecisoes, setVerDecisoes] = useState(false)
+  const [ritmo, setRitmo] = useState<RitmoComparado | null>(null)
   const atual = useRef(file)
   atual.current = file
 
@@ -80,6 +107,10 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
   useEffect(() => {
     ia.status().then(setStatus, (e: Error) => setStatusErr(e.message))
   }, [])
+
+  useEffect(() => {
+    ia.decisoes(dir).then(setDecisoes, () => undefined)
+  }, [dir])
 
   // ao trocar de capítulo: recupera a última revisão (se o texto não mudou) e a última leitura beta
   useEffect(() => {
@@ -92,6 +123,14 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
     setBeta(null)
     setBetaErr('')
     setFiltro('todas')
+    setEscolha(null)
+    setRitmo(null)
+    ia.ritmo(dir, file).then(
+      (r) => {
+        if (atual.current === file) setRitmo(r)
+      },
+      () => undefined
+    )
     ia.revisaoGet(dir, file).then(
       (r) => {
         if (atual.current !== file || !r) return
@@ -137,11 +176,14 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
     }
   }
 
-  const aceitar = async (lista: Sugestao[]): Promise<void> => {
+  /** `alternativa`: troca escolhida entre as que o LanguageTool ofereceu (uma sugestão por vez) */
+  const aceitar = async (lista: Sugestao[], alternativa?: string): Promise<void> => {
+    lista = lista.filter((x) => !x.soAviso)
     if (!lista.length) return
     setEstados((s) => ({ ...s, ...Object.fromEntries(lista.map((x) => [x.id, 'aplicando' as Estado])) }))
     try {
-      const r = await ia.aplicar(dir, file, lista.map((x) => x.id))
+      const alvo = lista.map((x) => (alternativa !== undefined && lista.length === 1 ? { id: x.id, substituto: alternativa } : x.id))
+      const r = await ia.aplicar(dir, file, alvo)
       const falhou = new Map(r.falhas.map((f) => [f.original, f.motivo]))
       const novos: Record<string, Estado> = {}
       const novasFalhas: Record<string, string> = {}
@@ -168,8 +210,38 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
     }
   }
 
+  /** "Só agora": esconde nesta tela; volta na próxima revisão. */
   const ignorar = (s: Sugestao): void => {
+    setEscolha(null)
     setEstados((e) => ({ ...e, [s.id]: e[s.id] === 'ignorada' ? 'pendente' : 'ignorada' }))
+  }
+
+  /** "Sempre manter": grava a decisão do livro; some daqui e das próximas revisões (e dos insights). */
+  const manterSempre = async (s: Sugestao): Promise<void> => {
+    setEscolha(null)
+    const d = decisaoPara(s)
+    try {
+      const nova = await ia.decidir(dir, {
+        tipo: d.tipo,
+        valor: d.valor,
+        rotulo: d.rotulo,
+        ...(d.soCapitulo && cap?.id ? { capitulo: cap.id } : {})
+      })
+      setDecisoes(nova)
+      setEstados((e) => ({ ...e, [s.id]: 'ignorada' }))
+      setAnuncio('Decisão guardada: não volta nas próximas revisões.')
+    } catch (e) {
+      setFalhas((f) => ({ ...f, [s.id]: (e as Error).message }))
+    }
+  }
+
+  const esquecer = async (d: DecisaoRevisao): Promise<void> => {
+    try {
+      setDecisoes(await ia.esquecerDecisao(dir, d.id))
+      setAnuncio('Decisão removida. Vale a partir da próxima revisão.')
+    } catch (e) {
+      setAnuncio((e as Error).message)
+    }
   }
 
   const pedirBeta = async (): Promise<void> => {
@@ -187,12 +259,14 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
     }
   }
 
-  const lista = sugs ?? []
+  // decisões novas valem na hora (sem revisar de novo)
+  const lista = useMemo(() => filtrarSugestoes(sugs ?? [], decisoes, undefined, chapters.find((c) => c.file === file)?.id), [sugs, decisoes, chapters, file])
   const contagem = useMemo(() => {
     const c: Record<string, number> = { todas: sugs?.length ?? 0 }
-    for (const s of sugs ?? []) c[s.categoria] = (c[s.categoria] ?? 0) + 1
+    for (const s of lista) c[s.categoria] = (c[s.categoria] ?? 0) + 1
+    c.todas = lista.length
     return c
-  }, [sugs])
+  }, [sugs, lista])
   const resolvidas = lista.filter((s) => estados[s.id] === 'aceita' || estados[s.id] === 'ignorada').length
   const visiveis = filtro === 'todas' ? lista : lista.filter((s) => s.categoria === filtro)
   const ortoPendentes = lista.filter((s) => s.categoria === 'ortografia' && (estados[s.id] ?? 'pendente') === 'pendente')
@@ -244,6 +318,38 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
               <span className="rv-num">{contagem[id] ?? 0}</span>
             </button>
           ))}
+        </div>
+
+        {ritmo && <Ritmo r={ritmo} />}
+
+        <div className="rv-decs">
+          <button type="button" className="rv-cat" aria-expanded={verDecisoes} onClick={() => setVerDecisoes((v) => !v)}>
+            <Ico n="manter" size={15} />
+            <span className="rv-catn">Sempre manter</span>
+            <span className="rv-num">{decisoes.length}</span>
+          </button>
+          {verDecisoes && (
+            <div className="rv-declist">
+              {decisoes.length === 0 && <p className="rv-decvazio">Nada ainda. Em “Ignorar › Sempre manter”, a escolha fica guardada para o livro todo.</p>}
+              <ul>
+                {decisoes.map((d) => {
+                  const capD = d.capitulo ? chapters.find((c) => c.id === d.capitulo) : undefined
+                  return (
+                    <li key={d.id}>
+                      <span className="rv-dect">{TIPO_DECISAO[d.tipo]}</span>
+                      <span className="rv-decv" title={d.valor}>
+                        {d.tipo === 'continuidade' ? (d.rotulo ?? d.valor).replace(/^continuidade: /, '') : d.tipo === 'ignorar-regra' ? (d.rotulo ?? d.valor).replace(/^regra: /, '') : d.valor}
+                        {capD && <em> · {capD.title}</em>}
+                      </span>
+                      <button type="button" className="rv-decx" aria-label={`Esquecer: ${d.valor}`} onClick={() => void esquecer(d)}>
+                        <Ico n="x" size={13} />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="panel rv-motor">
@@ -335,38 +441,79 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
                   <span className={`rv-tag c-${s.categoria}`}>{NOME_CAT[s.categoria]}</span>
                   <span className="rv-why">{s.motivo}</span>
                 </div>
-                <p className="rv-diff">
-                  {s.antes && <span className="rv-ctx">{s.antes}</span>}
-                  <del>
-                    <span className="rv-sr">trecho original: </span>
-                    {s.original}
-                  </del>
-                  <ins>
-                    <span className="rv-sr">sugestão: </span>
-                    {s.substituto || <em>(remover)</em>}
-                  </ins>
-                  {s.depois && <span className="rv-ctx">{s.depois}</span>}
-                </p>
+                {s.soAviso ? (
+                  <p className="rv-diff">
+                    {s.antes && <span className="rv-ctx">{s.antes}</span>}
+                    <span className="rv-marcas">
+                      <ComMarcas texto={s.original} marcas={s.marcas ?? []} />
+                    </span>
+                    {s.depois && <span className="rv-ctx">{s.depois}</span>}
+                  </p>
+                ) : (
+                  <p className="rv-diff">
+                    {s.antes && <span className="rv-ctx">{s.antes}</span>}
+                    <del>
+                      <span className="rv-sr">trecho original: </span>
+                      {s.original}
+                    </del>
+                    <ins>
+                      <span className="rv-sr">sugestão: </span>
+                      {s.substituto || <em>(remover)</em>}
+                    </ins>
+                    {s.depois && <span className="rv-ctx">{s.depois}</span>}
+                  </p>
+                )}
+                {!s.soAviso && (s.alternativas?.length ?? 0) > 0 && st !== 'aceita' && (
+                  <div className="rv-alts" role="group" aria-label="Outras trocas possíveis">
+                    <span className="rv-altsl">ou</span>
+                    {s.alternativas?.map((alt) => (
+                      <button
+                        key={alt}
+                        type="button"
+                        className="rv-alt"
+                        disabled={st === 'aplicando'}
+                        onClick={() => void aceitar([s], alt)}
+                        aria-label={`Aceitar com outra troca: "${alt}"`}
+                      >
+                        {alt}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {falhas[s.id] && <p className="err rv-falha">{falhas[s.id]}</p>}
                 <div className="rv-cardb">
-                  <button
-                    type="button"
-                    className={`btn sm rv-ok ${st === 'aceita' ? 'feito' : ''}`}
-                    disabled={st === 'aceita' || st === 'aplicando'}
-                    onClick={() => void aceitar([s])}
-                    aria-label={`Aceitar: trocar "${s.original}" por "${s.substituto || 'nada'}"`}
-                  >
-                    <Ico n="check" /> {st === 'aceita' ? 'Aceita' : st === 'aplicando' ? 'Aplicando…' : 'Aceitar'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn sm"
-                    disabled={st === 'aceita' || st === 'aplicando'}
-                    aria-pressed={st === 'ignorada'}
-                    onClick={() => ignorar(s)}
-                  >
-                    <Ico n="x" /> {st === 'ignorada' ? 'Ignorada' : 'Ignorar'}
-                  </button>
+                  {!s.soAviso && (
+                    <button
+                      type="button"
+                      className={`btn sm rv-ok ${st === 'aceita' ? 'feito' : ''}`}
+                      disabled={st === 'aceita' || st === 'aplicando'}
+                      onClick={() => void aceitar([s])}
+                      aria-label={`Aceitar: trocar "${s.original}" por "${s.substituto || 'nada'}"`}
+                    >
+                      <Ico n="check" /> {st === 'aceita' ? 'Aceita' : st === 'aplicando' ? 'Aplicando…' : 'Aceitar'}
+                    </button>
+                  )}
+                  {st === 'ignorada' ? (
+                    <button type="button" className="btn sm" aria-pressed="true" onClick={() => ignorar(s)}>
+                      <Ico n="x" /> Ignorada
+                    </button>
+                  ) : escolha === s.id ? (
+                    <span className="rv-escolha" role="group" aria-label="Ignorar">
+                      <button type="button" className="btn sm" autoFocus onClick={() => ignorar(s)}>
+                        Só agora
+                      </button>
+                      <button type="button" className="btn sm rv-manter" onClick={() => void manterSempre(s)} title="Guarda a decisão no livro: não volta nas próximas revisões nem nos insights.">
+                        <Ico n="manter" /> Sempre manter · {decisaoPara(s).acao}
+                      </button>
+                      <button type="button" className="rv-decx" aria-label="Cancelar" onClick={() => setEscolha(null)}>
+                        <Ico n="x" size={13} />
+                      </button>
+                    </span>
+                  ) : (
+                    <button type="button" className="btn sm" disabled={st === 'aceita' || st === 'aplicando'} onClick={() => setEscolha(s.id)}>
+                      <Ico n="x" /> Ignorar
+                    </button>
+                  )}
                 </div>
               </article>
             )
@@ -431,6 +578,15 @@ export function Revisor({ project, onProject, go, params }: ScreenProps): ReactE
               </section>
             )}
             {beta.citacao && <blockquote className="rv-cit">“{beta.citacao}”</blockquote>}
+            {(beta.avisos?.length ?? 0) > 0 && (
+              <ul className="rv-avisos">
+                {beta.avisos?.map((a) => (
+                  <li key={a}>
+                    <Ico n="alerta" size={14} /> <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
 

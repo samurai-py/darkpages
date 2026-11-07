@@ -100,7 +100,9 @@ export function PainelInsights({ project, go }: Props): ReactElement {
         titulo: i.acao?.tipo === 'cartao' ? i.acao.titulo : palavras.slice(0, 7).join(' ') + (palavras.length > 7 ? '…' : ''),
         texto: i.acao?.tipo === 'cartao' ? i.acao.texto : i.texto,
         ...(i.capitulo ? { capitulo: i.capitulo } : {}),
-        fichas: []
+        fichas: [],
+        // sugestão da IA: entra no Enredo como provisória
+        origem: 'ia'
       })
       await insightsStore.marcar(i.id, 'aplicado')
       return 'Virou cartão no Enredo.'

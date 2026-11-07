@@ -198,7 +198,7 @@ function serializeChapter(fm: FrontMatter, body: string): string {
 }
 
 function kindOf(v: unknown): ChapterKind {
-  return v === 'prologo' || v === 'epilogo' ? v : 'capitulo'
+  return v === 'prologo' || v === 'epilogo' || v === 'parte' ? v : 'capitulo'
 }
 
 function metaFromYaml(raw: string): ProjectMeta {
@@ -299,12 +299,13 @@ export async function saveChapter(dir: string, file: string, title: string, body
   return { savedAt: new Date().toISOString(), words: countWords(body), snapshot }
 }
 
-export async function addChapter(dir: string, title: string): Promise<Project> {
+/** Cria um capítulo (ou outro tipo de item, como uma parte) no fim do livro. */
+export async function addChapter(dir: string, title: string, kind: ChapterKind = 'capitulo'): Promise<Project> {
   const files = (await readdir(join(dir, MS_DIR))).filter((f) => CHAPTER_FILE.test(f)).sort()
   const last = files.at(-1)
   const next = last ? Number(last.slice(0, 3)) + 1 : 1
   const file = `${String(next).padStart(3, '0')}-${slugify(title)}.md`
-  await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: title, tipo: 'capitulo', id: novoIdCapitulo() }, ''))
+  await atomicWrite(join(dir, MS_DIR, file), serializeChapter({ titulo: title, tipo: kind, id: novoIdCapitulo() }, ''))
   return openProject(dir)
 }
 

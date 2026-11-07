@@ -159,16 +159,20 @@ export function rotuloCapitulo(n: number, cfg: RotuloCfg): string {
   return aplicarCaixa(inicialMaiuscula(s), cfg.caixa)
 }
 
-/** Rótulo de qualquer item do sumário: "Prólogo"/"Epílogo" ou o rótulo do capítulo; null quando não há. */
-export function rotuloDe(kind: ChapterKind, n: number, cfg: RotuloCfg): string | null {
+/**
+ * Rótulo de qualquer item do sumário: "Prólogo"/"Epílogo", o rótulo da parte
+ * (com `cfgParte`, n = número da parte) ou o do capítulo; null quando não há.
+ */
+export function rotuloDe(kind: ChapterKind, n: number, cfg: RotuloCfg, cfgParte: RotuloCfg = DEFAULT_ROTULO_PARTE): string | null {
   if (kind === 'prologo') return aplicarCaixa('Prólogo', cfg.caixa)
   if (kind === 'epilogo') return aplicarCaixa('Epílogo', cfg.caixa)
+  if (kind === 'parte') return rotuloCapitulo(n, cfgParte) || null
   return rotuloCapitulo(n, cfg) || null
 }
 
 /** Mesmo rótulo, em caixa normal (para a interface do app: listas, selects, cabeçalho do editor). */
-export function rotuloTela(kind: ChapterKind, n: number, cfg: RotuloCfg): string | null {
-  return rotuloDe(kind, n, { ...cfg, caixa: 'normal' })
+export function rotuloTela(kind: ChapterKind, n: number, cfg: RotuloCfg, cfgParte: RotuloCfg = DEFAULT_ROTULO_PARTE): string | null {
+  return rotuloDe(kind, n, { ...cfg, caixa: 'normal' }, { ...cfgParte, caixa: 'normal' })
 }
 
 const LEGADO: Record<ChapterLabel, EstiloRotulo> = {
@@ -180,22 +184,133 @@ const LEGADO: Record<ChapterLabel, EstiloRotulo> = {
 
 const ESTILOS = new Set<string>(ESTILOS_ROTULO.map((e) => e.v))
 
+function validar(r: Partial<RotuloCfg>, base: RotuloCfg): RotuloCfg {
+  return {
+    estilo: typeof r.estilo === 'string' && ESTILOS.has(r.estilo) ? r.estilo : base.estilo,
+    palavra: typeof r.palavra === 'string' ? r.palavra : base.palavra,
+    genero: r.genero === 'f' || r.genero === 'm' ? r.genero : base.genero,
+    caixa: r.caixa === 'normal' || r.caixa === 'versalete' || r.caixa === 'maiusculas' ? r.caixa : base.caixa,
+    modelo: typeof r.modelo === 'string' && r.modelo.trim() ? r.modelo : base.modelo
+  }
+}
+
 /** Configuração efetiva do livro: usa `rotulo` quando existe; senão migra a opção antiga `chapterLabel`. */
 export function resolveRotulo(l: Pick<LayoutSettings, 'rotulo' | 'chapterLabel'> | undefined): RotuloCfg {
   const base: RotuloCfg = { ...DEFAULT_ROTULO, estilo: LEGADO[l?.chapterLabel ?? 'numero'] ?? DEFAULT_ROTULO.estilo }
   const r = l?.rotulo
   if (!r) return base
-  return {
-    estilo: ESTILOS.has(r.estilo) ? r.estilo : base.estilo,
-    palavra: typeof r.palavra === 'string' ? r.palavra : base.palavra,
-    genero: r.genero === 'f' ? 'f' : 'm',
-    caixa: r.caixa === 'normal' || r.caixa === 'versalete' ? r.caixa : 'maiusculas',
-    modelo: typeof r.modelo === 'string' && r.modelo.trim() ? r.modelo : base.modelo
-  }
+  return validar(r, base)
 }
 
-/** Numera só os capítulos (prólogo e epílogo ficam com 0). */
+/**
+ * Numera só os capítulos, contando o livro inteiro (prólogo, epílogo e partes
+ * ficam com 0). É a numeração das referências `@capN` das fichas e do
+ * "cap. N de M": nunca recomeça por parte.
+ */
 export function numerarCapitulos(kinds: Array<{ kind: ChapterKind }>): number[] {
   let n = 0
   return kinds.map((c) => (c.kind === 'capitulo' ? (n += 1) : 0))
+}
+
+// ---------------------------------------------------------------- partes
+
+/**
+ * Padrão das partes: "Parte um", em maiúsculas no livro. O numeral por extenso
+ * fica invariável ("Parte um", "Parte dois"), por isso o gênero padrão é m; o
+ * ordinal concorda com a palavra e pede f ("Primeira Parte") — ver
+ * `generoSugerido`.
+ */
+export const DEFAULT_ROTULO_PARTE: RotuloCfg = {
+  estilo: 'classico-extenso',
+  palavra: 'Parte',
+  genero: 'm',
+  caixa: 'maiusculas',
+  modelo: '{palavra} {extenso}'
+}
+
+export const ESTILOS_ROTULO_PARTE: { v: EstiloRotulo; label: string }[] = [
+  { v: 'classico-extenso', label: 'Palavra + número por extenso (Parte um)' },
+  { v: 'romano-palavra', label: 'Palavra + romano (Parte I, Livro I)' },
+  { v: 'ordinal-palavra', label: 'Ordinal + palavra (Primeira Parte)' },
+  { v: 'classico-numero', label: 'Palavra + algarismo (Parte 1)' },
+  { v: 'romano', label: 'Só romano (I)' },
+  { v: 'numero', label: 'Só algarismo (1)' },
+  { v: 'modelo', label: 'Modelo livre…' },
+  { v: 'nenhum', label: 'Só o título' }
+]
+
+/**
+ * Gênero que soa natural ao trocar o estilo da parte: ordinal concorda com
+ * "Parte" ("Primeira Parte"); extenso fica invariável ("Parte um").
+ * Só sugere para a palavra "Parte"; "Livro", "Ato" etc. ficam como estão.
+ */
+export function generoSugerido(estilo: EstiloRotulo, palavra: string, atual: Genero): Genero {
+  if (palavra.trim().toLowerCase() !== 'parte') return atual
+  return estilo === 'ordinal-palavra' ? 'f' : estilo === 'classico-extenso' ? 'm' : atual
+}
+
+/** Nome das partes do livro (`layout.rotuloParte`), com os padrões de DEFAULT_ROTULO_PARTE. */
+export function resolveRotuloParte(l: Pick<LayoutSettings, 'rotuloParte'> | undefined): RotuloCfg {
+  const r = l?.rotuloParte
+  return r ? validar(r, DEFAULT_ROTULO_PARTE) : { ...DEFAULT_ROTULO_PARTE }
+}
+
+/** Tudo o que define como os itens do livro são chamados e numerados. */
+export interface Numeracao {
+  /** nome dos capítulos */
+  rotulo: RotuloCfg
+  /** nome das partes */
+  parte: RotuloCfg
+  /** a numeração dos capítulos recomeça em 1 a cada parte */
+  reiniciar: boolean
+}
+
+export function resolveNumeracao(
+  l: Pick<LayoutSettings, 'rotulo' | 'chapterLabel' | 'rotuloParte' | 'reiniciarNumeracao'> | undefined
+): Numeracao {
+  return { rotulo: resolveRotulo(l), parte: resolveRotuloParte(l), reiniciar: l?.reiniciarNumeracao === true }
+}
+
+/** Aceita a configuração completa ou só o nome dos capítulos (partes no padrão, sem recomeçar). */
+export function comoNumeracao(c: RotuloCfg | Numeracao | undefined): Numeracao {
+  if (!c) return { rotulo: DEFAULT_ROTULO, parte: DEFAULT_ROTULO_PARTE, reiniciar: false }
+  if ('parte' in c) return c
+  return { rotulo: c, parte: DEFAULT_ROTULO_PARTE, reiniciar: false }
+}
+
+/**
+ * Número de cada item na ordem do livro, como o leitor vê: capítulo → seu
+ * número (recomeça em cada parte quando `reiniciar`), parte → número da parte,
+ * prólogo/epílogo → 0.
+ */
+export function numerarItens(kinds: Array<{ kind: ChapterKind }>, reiniciar = false): number[] {
+  let cap = 0
+  let parte = 0
+  return kinds.map((c) => {
+    if (c.kind === 'parte') {
+      parte += 1
+      if (reiniciar) cap = 0
+      return parte
+    }
+    return c.kind === 'capitulo' ? (cap += 1) : 0
+  })
+}
+
+/** Para cada item: está dentro de uma parte (capítulo depois de alguma parte)? Usado no recuo do sumário. */
+export function dentroDeParte(kinds: Array<{ kind: ChapterKind }>): boolean[] {
+  let viu = false
+  return kinds.map((c) => {
+    if (c.kind === 'parte') {
+      viu = true
+      return false
+    }
+    return viu && c.kind === 'capitulo'
+  })
+}
+
+/** Rótulos de todos os itens do livro (em caixa normal: interface do app e exportações de texto). */
+export function rotulosTela(kinds: Array<{ kind: ChapterKind }>, cfg: RotuloCfg | Numeracao): string[] {
+  const num = comoNumeracao(cfg)
+  const ns = numerarItens(kinds, num.reiniciar)
+  return kinds.map((c, i) => rotuloTela(c.kind, ns[i] ?? 0, num.rotulo, num.parte) ?? '')
 }

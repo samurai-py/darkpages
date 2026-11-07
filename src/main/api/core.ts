@@ -33,7 +33,8 @@ export const core: Handlers = {
   readChapter: async (ctx, dir, file) => readChapter(await bookDir(ctx, dir), str(file, 200)),
   saveChapter: async (ctx, dir, file, title, body) =>
     saveChapter(await bookDir(ctx, dir), str(file, 200), str(title, 300), str(body)),
-  addChapter: async (ctx, dir, title) => addChapter(await bookDir(ctx, dir), str(title, 300)),
+  addChapter: async (ctx, dir, title, kind) =>
+    addChapter(await bookDir(ctx, dir), str(title, 300), kind === 'parte' ? 'parte' : 'capitulo'),
   saveLayout: async (ctx, dir, layout) => saveLayout(await bookDir(ctx, dir), layout as LayoutSettings),
   exportPrintPdf: async (ctx, dir, perfil) => {
     const p = perfil === undefined ? 'grafica' : str(perfil, 10)

@@ -254,6 +254,75 @@
 .en-mface { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; box-shadow: 0 0 0 2px var(--line); }
 .en-mface > svg, .en-mface > img { width: 100%; height: 100%; display: block; object-fit: cover; }
 
+/* ---------- origem/estado do cartão ---------- */
+.en-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.en-selo {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-family: var(--fu); font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px 2px 6px; border-radius: 999px; line-height: 1.5;
+  border: 1px dashed var(--acc); color: var(--acc); background: color-mix(in srgb, var(--acc) 7%, transparent);
+}
+.en-selo.s-canonico { border-style: solid; border-color: var(--acc2); color: var(--acc2); background: color-mix(in srgb, var(--acc2) 7%, transparent); }
+.en-selo.s-descartado { border-style: solid; border-color: var(--line); color: var(--muted); background: transparent; text-decoration: line-through; }
+.en-person .en-selo { align-self: center; }
+.en-card.es-provisorio, .en-mcard.es-provisorio, .en-rrow.es-provisorio {
+  background: repeating-linear-gradient(135deg, var(--panel) 0 9px, color-mix(in srgb, var(--acc) 5%, var(--panel)) 9px 18px);
+}
+.en-card.es-descartado, .en-mcard.es-descartado, .en-rrow.es-descartado, .en-person.es-descartado { opacity: .5; }
+.en-card.es-descartado .en-title, .en-mcard.es-descartado .en-title, .en-rrow.es-descartado .en-rt { text-decoration: line-through; text-decoration-color: var(--muted); }
+.en-rtl { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.en-festado { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.en-festado .select { min-height: 32px; font-size: 12.5px; }
+.en-pprov {
+  font: inherit; cursor: pointer; border: 1px dashed var(--acc); color: var(--acc); background: transparent;
+  transition: background-color .2s var(--ease);
+}
+.en-pprov:hover { background: color-mix(in srgb, var(--acc) 9%, transparent); }
+.en-estado {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: calc(var(--rad) - 2px);
+  border: 1px solid var(--line); background: var(--panel);
+}
+.en-estado.s-provisorio { border-style: dashed; border-color: var(--acc); }
+.en-estado.s-provisorio > .en-eb { color: var(--acc); }
+.en-estado.s-canonico > .en-eb { color: var(--acc2); }
+.en-estado-txt { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/* ---------- memória do livro ---------- */
+.en-memoria { flex: 1; overflow: auto; padding: 18px 28px 48px; display: flex; flex-direction: column; gap: 16px; }
+.en-memhead { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.en-memintro { margin: 0; max-width: 620px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.en-memintro b { color: var(--text); font-weight: 600; }
+.en-memconta { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.en-memconta .pill { display: inline-flex; align-items: center; gap: 5px; }
+.en-pdes { border-color: var(--acc); color: var(--acc); }
+.en-memlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-width: 920px; }
+.en-mem {
+  padding: 14px 16px; border-radius: calc(var(--rad) + 2px); border: 1px solid var(--line); background: var(--panel);
+  display: flex; flex-direction: column; gap: 10px; animation: fadeUp .4s var(--ease) both;
+  transition: border-color .25s var(--ease);
+}
+.en-mem.s-desatualizado { border-color: color-mix(in srgb, var(--acc) 55%, var(--line)); }
+.en-mem.travado { border-color: color-mix(in srgb, var(--acc2) 55%, var(--line)); }
+.en-mem.s-sem-texto { opacity: .6; }
+.en-mem[aria-busy='true'] .en-memtxt { animation: enPulse 1.4s var(--ease) infinite alternate; }
+@keyframes enPulse { from { opacity: .35; } to { opacity: .9; } }
+.en-memh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.en-memh h2 { margin: 0; font-size: 19px; font-weight: 500; }
+.en-memest {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  background: var(--chipbg); color: var(--muted);
+}
+.en-memest > i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.en-memest.s-atual > i { background: var(--acc2); }
+.en-memest.s-desatualizado { color: var(--acc); }
+.en-memest.s-desatualizado > i { background: var(--acc); }
+.en-memest.s-sem-resumo > i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.en-memest.travado { color: var(--acc2); }
+.en-mempal { font-variant-numeric: tabular-nums; }
+.en-memtxt { margin: 0; font-family: var(--fb); font-size: 16px; line-height: 1.55; white-space: pre-line; }
+.en-memtxt.vazio { font-family: var(--fu); font-size: 13px; color: var(--muted); }
+.en-memedit { min-height: 120px; }
+.en-memabrir { margin-left: auto; }
+
 @media (max-width: 1100px) {
   .en-aside { width: 320px; }
 }
