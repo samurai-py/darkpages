@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react'
 import { folio } from '../api'
-import { ia, type IaSettings, type LtModo, type ModeloOllama, type Provedor, type RevisorSettings, type SugestaoModelo, type TesteIa } from '../features/ia/api'
+import { ia, type IaSettings, type LtModo, type ModeloCodex, type ModeloOllama, type Provedor, type RevisorSettings, type SugestaoModelo, type TesteIa } from '../features/ia/api'
 import { Ico } from '../features/ia/icones'
 import { ArteSettingsPanel } from '../features/arte/SettingsPanel'
 import { SyncSettingsPanel } from '../features/sync/SettingsPanel'
+import { SecaoProativo } from '../features/insights/SecaoProativo'
 import './ajustes.css'
 
 /** Configurações do app (IA, revisor, arte, Drive, Spotify). Não depende de livro aberto. */
@@ -49,8 +50,20 @@ const IA_PADRAO: Required<IaSettings> = {
   openaiKey: '',
   openaiModel: 'gpt-5.4-mini-2026-03-17',
   geminiKey: '',
-  geminiModel: 'gemini-3.8-flash'
+  geminiModel: 'gemini-3.8-flash',
+  claudeCliModel: '',
+  codexCliModel: '',
+  claudeCliModelAuto: 'haiku',
+  codexCliModelAuto: ''
 }
+
+/** Apelidos do Claude Code (conferidos em `claude --help`); o campo aceita o nome completo de qualquer modelo. */
+const APELIDOS_CLAUDE: Array<{ id: string; desc: string }> = [
+  { id: 'haiku', desc: 'mais rápido e econômico' },
+  { id: 'sonnet', desc: 'equilíbrio entre qualidade e limite' },
+  { id: 'opus', desc: 'mais capaz, gasta mais limite' },
+  { id: 'fable', desc: 'modelo mais recente' }
+]
 
 type Feedback = { tipo: 'ok' | 'erro' | 'info'; msg: string } | null
 
@@ -83,6 +96,18 @@ function SecaoIa(): ReactElement {
   const [fb, setFb] = useState<Feedback>(null)
   const [ocupado, setOcupado] = useState<'' | 'salvar' | 'testar'>('')
   const [teste, setTeste] = useState<TesteIa | null>(null)
+  const [codex, setCodex] = useState<ModeloCodex[] | null>(null)
+  const [codexErr, setCodexErr] = useState('')
+
+  const listarCodex = useCallback(async () => {
+    setCodexErr('')
+    try {
+      setCodex(await ia.modelosCodex())
+    } catch (e) {
+      setCodex([])
+      setCodexErr((e as Error).message)
+    }
+  }, [])
 
   const listar = useCallback(async (url?: string) => {
     setBuscando(true)
@@ -106,11 +131,12 @@ function SecaoIa(): ReactElement {
         setForm(v)
         setRam(r)
         if (v.provider === 'ollama') void listar()
+        if (v.provider === 'codex-cli') void listarCodex()
       } catch (e) {
         setFb({ tipo: 'erro', msg: (e as Error).message })
       }
     })()
-  }, [listar])
+  }, [listar, listarCodex])
 
   const set = <K extends keyof IaSettings>(k: K, v: Required<IaSettings>[K]): void => {
     setForm((f) => ({ ...f, [k]: v }))
@@ -184,6 +210,7 @@ function SecaoIa(): ReactElement {
               onChange={() => {
                 set('provider', p.id)
                 if (p.id === 'ollama' && !modelos) void listar(form.ollamaUrl)
+                if (p.id === 'codex-cli' && !codex) void listarCodex()
               }}
             />
             <span className="aj-optn">{p.nome}</span>
@@ -259,6 +286,94 @@ function SecaoIa(): ReactElement {
                 </button>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {(form.provider === 'claude-cli' || form.provider === 'codex-cli') && (
+        <div className="aj-bloco">
+          <p className="aj-alerta">
+            <Ico n="nuvem" size={16} />
+            {form.provider === 'claude-cli'
+              ? 'O texto que você mandar analisar vai para a Anthropic pelo Claude Code e conta no limite da sua assinatura.'
+              : 'O texto que você mandar analisar vai para a OpenAI pelo Codex e conta no limite da sua assinatura.'}
+          </p>
+          {form.provider === 'claude-cli' ? (
+            <>
+              <label className="field">
+                Modelo
+                <input
+                  className="input"
+                  list="aj-modelos-claude-cli"
+                  value={form.claudeCliModel}
+                  placeholder="padrão do Claude Code"
+                  onChange={(e) => set('claudeCliModel', e.target.value.trim())}
+                  spellCheck={false}
+                  aria-describedby="aj-cli-d"
+                />
+              </label>
+              <label className="field">
+                Modelo para tarefas automáticas
+                <input
+                  className="input"
+                  list="aj-modelos-claude-cli"
+                  value={form.claudeCliModelAuto}
+                  placeholder="o mesmo do uso normal"
+                  onChange={(e) => set('claudeCliModelAuto', e.target.value.trim())}
+                  spellCheck={false}
+                  aria-describedby="aj-cli-d"
+                />
+              </label>
+              <datalist id="aj-modelos-claude-cli">
+                {APELIDOS_CLAUDE.map((m) => (
+                  <option key={m.id} value={m.id} label={`${m.id} · ${m.desc}`} />
+                ))}
+              </datalist>
+              <p id="aj-cli-d" className="aj-hint">
+                Mais rápido e econômico: <b>haiku</b>. Equilíbrio: <b>sonnet</b>. Mais capaz: <b>opus</b>. Vazio usa o padrão do Claude Code; também
+                aceita o nome completo de um modelo. O modelo de tarefas automáticas é usado pelo modo proativo (padrão: haiku, para poupar seu limite).
+              </p>
+            </>
+          ) : (
+            <>
+              <label className="field">
+                Modelo
+                <input
+                  className="input"
+                  list="aj-modelos-codex"
+                  value={form.codexCliModel}
+                  placeholder="padrão do Codex (deixe vazio)"
+                  onChange={(e) => set('codexCliModel', e.target.value.trim())}
+                  spellCheck={false}
+                  aria-describedby="aj-codex-d"
+                />
+              </label>
+              <label className="field">
+                Modelo para tarefas automáticas
+                <input
+                  className="input"
+                  list="aj-modelos-codex"
+                  value={form.codexCliModelAuto}
+                  placeholder="o mesmo do uso normal"
+                  onChange={(e) => set('codexCliModelAuto', e.target.value.trim())}
+                  spellCheck={false}
+                  aria-describedby="aj-codex-d"
+                />
+              </label>
+              <datalist id="aj-modelos-codex">
+                {(codex ?? []).map((m) => (
+                  <option key={m.id} value={m.id} label={m.descricao ? `${m.nome} · ${m.descricao}` : m.nome} />
+                ))}
+              </datalist>
+              <p id="aj-codex-d" className="aj-hint">
+                {codex && codex.length > 0
+                  ? `Sugestões lidas do catálogo do Codex instalado (${codex.length} modelos). Vazio usa o padrão do Codex.`
+                  : codexErr
+                    ? `Não deu para ler a lista de modelos do Codex: ${codexErr} Digite o nome do modelo, se souber.`
+                    : 'Lendo a lista de modelos do Codex…'}{' '}
+                Para o modo proativo, escolha um modelo mais leve, se a sua assinatura oferecer.
+              </p>
+            </>
           )}
         </div>
       )}
@@ -468,7 +583,12 @@ export function Ajustes(): ReactElement {
         ))}
       </nav>
       <div className="aj-main">
-        {secao === 'ia' && <SecaoIa />}
+        {secao === 'ia' && (
+          <>
+            <SecaoIa />
+            <SecaoProativo />
+          </>
+        )}
         {secao === 'revisor' && <SecaoRevisor />}
         {secao === 'arte' && (
           <section className="aj-sec" aria-labelledby="aj-h-arte">

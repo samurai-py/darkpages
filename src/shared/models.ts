@@ -184,3 +184,60 @@ export interface Marco {
   data: string
   feito: boolean
 }
+
+// ---------------------------------------------------------------------------
+// INSIGHTS (modo proativo) — coleção "insights" do livro. DONO: IA
+// Métodos em src/main/features/insights.ts. Configuração na seção "proativo".
+// ---------------------------------------------------------------------------
+export type InsightTipo = 'continuidade' | 'estilo' | 'ideias' | 'pistas' | 'resumo'
+export const INSIGHT_TIPOS: InsightTipo[] = ['continuidade', 'estilo', 'ideias', 'pistas', 'resumo']
+export type InsightStatus = 'novo' | 'visto' | 'aplicado' | 'dispensado'
+
+export type InsightAcao =
+  | { tipo: 'substituir'; original: string; substituto: string; antes?: string; depois?: string }
+  | { tipo: 'abrirFicha'; fichaId: string }
+  | { tipo: 'cartao'; titulo: string; texto: string }
+  | { tipo: 'redigir'; ideia: { tipo: string; texto: string } }
+
+export interface Insight {
+  id: string
+  tipo: InsightTipo
+  /** arquivo do capítulo ('' no resumo do dia) */
+  capitulo: string
+  /** trecho do texto a que se refere ('' quando geral) */
+  trecho: string
+  texto: string
+  acao?: InsightAcao
+  status: InsightStatus
+  /** 'local' (checagem do app) ou 'ia' */
+  origem: 'local' | 'ia'
+  criadoEm: string
+}
+
+export type ProativoModo = 'off' | 'leve' | 'completo'
+
+/** seção "proativo" das configurações */
+export interface ProativoSettings {
+  modo: ProativoModo
+  /** chamadas de IA por dia, somando todos os livros */
+  limiteDiario: number
+  /** "HH:MM"; início = fim desliga o horário silencioso */
+  silencioInicio: string
+  silencioFim: string
+  tipos: Record<InsightTipo, boolean>
+  palavrasMin: number
+  /** segundos sem digitar para contar como pausa */
+  pausaS: number
+}
+
+/** 'insights.estado'() → situação do modo proativo para a interface */
+export interface ProativoEstado {
+  config: ProativoSettings
+  usadasHoje: number
+  silencioAgora: boolean
+  /** o texto sai do computador quando a IA proativa roda */
+  externo: boolean
+  nomeProvedor: string
+  modeloAutomatico: string
+  iaLigada: boolean
+}

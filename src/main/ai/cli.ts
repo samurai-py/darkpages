@@ -19,6 +19,16 @@ import { join } from 'node:path'
 
 export type CliKind = 'claude' | 'codex'
 
+/** Mesma regra de nome de modelo de ai/index.ts (impede injetar opções: não começa com "-"). */
+export const MODELO_CLI_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$/
+
+/**
+ * Apelidos aceitos pelo Claude Code em `--model` (conferido em `claude --help`:
+ * "an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet') or a
+ * model's full name"). "haiku" é o apelido do modelo mais leve.
+ */
+export const APELIDOS_CLAUDE = ['haiku', 'sonnet', 'opus', 'fable'] as const
+
 const NOME: Record<CliKind, string> = { claude: 'Claude Code', codex: 'Codex' }
 const LOGIN: Record<CliKind, string> = {
   claude: 'rode `claude` uma vez neste computador e faça login com sua conta Claude',
@@ -85,19 +95,23 @@ function explicaFalha(kind: CliKind, stderr: string, stdout: string): Error {
  * Envia um pedido de texto pela assinatura.
  * `prompt` já contém toda a conversa; `system` são as instruções do Folio.
  */
-export async function chatViaCli(kind: CliKind, system: string, prompt: string, timeoutMs: number): Promise<string> {
+export async function chatViaCli(kind: CliKind, system: string, prompt: string, timeoutMs: number, modelo = ''): Promise<string> {
+  if (modelo && !MODELO_CLI_RE.test(modelo)) throw new Error(`Nome de modelo inválido para o ${NOME[kind]}.`)
   const bin = await findBin(kind)
   const cwd = await mkdtemp(join(tmpdir(), 'folio-ia-'))
   try {
     if (kind === 'claude') {
       const args = ['-p', '--output-format', 'text', '--tools', '']
+      if (modelo) args.push('--model', modelo)
       if (system) args.push('--system-prompt', system)
       const r = await run(bin, args, prompt, cwd, timeoutMs)
       if (r.code !== 0 || !r.stdout.trim()) throw explicaFalha(kind, r.stderr, r.stdout)
       return r.stdout.trim()
     }
     const saida = join(cwd, 'resposta.txt')
-    const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', '--color', 'never', '-o', saida, '-']
+    const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', '--color', 'never', '-o', saida]
+    if (modelo) args.push('-m', modelo)
+    args.push('-')
     const entrada =
       (system ? `INSTRUÇÕES (siga estritamente; não execute comandos, só responda com texto):\n${system}\n\n` : '') + prompt
     const r = await run(bin, args, entrada, cwd, timeoutMs)
@@ -118,4 +132,47 @@ export async function chatViaCli(kind: CliKind, system: string, prompt: string, 
 export function conversaComoTexto(messages: Array<{ role: 'user' | 'assistant'; content: string }>): string {
   if (messages.length === 1 && messages[0]?.role === 'user') return messages[0].content
   return messages.map((m) => `${m.role === 'user' ? 'USUÁRIO' : 'ASSISTENTE'}:\n${m.content}`).join('\n\n')
+}
+
+export interface ModeloCodex {
+  id: string
+  nome: string
+  descricao: string
+}
+
+let cacheCodex: { em: number; lista: ModeloCodex[] } | null = null
+
+/**
+ * Modelos que o Codex desta máquina oferece, lidos do catálogo local com
+ * `codex debug models` (não chama a IA nem gasta limite da assinatura).
+ * Só os visíveis na lista do próprio Codex. Cache de 10 minutos.
+ */
+export async function modelosCodex(): Promise<ModeloCodex[]> {
+  if (cacheCodex && Date.now() - cacheCodex.em < 600_000) return cacheCodex.lista
+  const bin = await findBin('codex')
+  const cwd = await mkdtemp(join(tmpdir(), 'folio-codex-'))
+  try {
+    const r = await run(bin, ['debug', 'models'], '', cwd, 20_000)
+    if (r.code !== 0) throw explicaFalha('codex', r.stderr, r.stdout)
+    let j: unknown
+    try {
+      j = JSON.parse(r.stdout)
+    } catch {
+      throw new Error('O Codex não devolveu a lista de modelos num formato conhecido.')
+    }
+    const itens = (j && typeof j === 'object' && Array.isArray((j as { models?: unknown }).models) ? (j as { models: unknown[] }).models : []) as Array<
+      Record<string, unknown>
+    >
+    const lista = itens
+      .filter((m) => typeof m.slug === 'string' && MODELO_CLI_RE.test(m.slug) && (m.visibility === undefined || m.visibility === 'list'))
+      .map((m) => ({
+        id: m.slug as string,
+        nome: typeof m.display_name === 'string' ? m.display_name : (m.slug as string),
+        descricao: typeof m.description === 'string' ? m.description.slice(0, 200) : ''
+      }))
+    cacheCodex = { em: Date.now(), lista }
+    return lista
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
 }

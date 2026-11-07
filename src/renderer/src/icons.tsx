@@ -7,9 +7,17 @@ const A = { style: { fill: 'var(--acc)' }, stroke: 'none' } as const
 
 export type IconName =
   | 'biblioteca' | 'manuscrito' | 'universo' | 'enredo' | 'mapas'
-  | 'idioma' | 'revisor' | 'arte' | 'diagramar' | 'ajustes'
+  | 'idioma' | 'revisor' | 'arte' | 'diagramar' | 'ajustes' | 'sino'
 
 const PATHS: Record<IconName, ReactElement> = {
+  sino: (
+    <>
+      <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.9H4.6z" {...D} />
+      <path d="M10 20.6a2.1 2.1 0 0 0 4 0" />
+      <path d="M12 3.2v1.9" />
+      <circle cx="17.4" cy="6.2" r="1.3" {...A} />
+    </>
+  ),
   biblioteca: (
     <>
       <path d="M3.5 20.5h17" />

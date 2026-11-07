@@ -1,5 +1,5 @@
 import { call } from '../../api'
-import type { BetaLeitura, Conflito, IdeiasResult, SinonimosResult, Sugestao } from '../../../../shared/models'
+import type { BetaLeitura, Conflito, IdeiasResult, ProativoEstado, ProativoSettings, SinonimosResult, Sugestao } from '../../../../shared/models'
 
 /** Chamadas tipadas da feature IA (métodos "ia.*" do processo principal). */
 
@@ -63,6 +63,18 @@ export interface IaSettings {
   openaiModel?: string
   geminiKey?: string
   geminiModel?: string
+  /** '' = padrão do programa */
+  claudeCliModel?: string
+  codexCliModel?: string
+  /** modelo para tarefas automáticas (modo proativo) */
+  claudeCliModelAuto?: string
+  codexCliModelAuto?: string
+}
+
+export interface ModeloCodex {
+  id: string
+  nome: string
+  descricao: string
 }
 
 export interface RevisorSettings {
@@ -76,6 +88,12 @@ export const ia = {
   modelosOllama: (url?: string) => call<ModeloOllama[]>('ia.modelosOllama', url ?? ''),
   sugestaoModelo: () => call<SugestaoModelo>('ia.sugestaoModelo'),
   salvarIa: (patch: IaSettings) => call<IaSettings>('ia.salvarAjustes', 'ia', patch),
+  salvarProativo: (patch: Partial<ProativoSettings>) => call<Partial<ProativoSettings>>('ia.salvarAjustes', 'proativo', patch),
+  proativo: () => call<ProativoEstado>('insights.estado'),
+  modelosClaudeCli: () => call<string[]>('ia.modelosClaudeCli'),
+  modelosCodex: () => call<ModeloCodex[]>('ia.modelosCodex'),
+  redigir: (dir: string, file: string, ideia: { tipo: string; texto: string }, contexto: { antes: string; depois?: string }, instrucao?: string) =>
+    call<{ texto: string }>('ia.redigir', dir, file, ideia, contexto, instrucao ?? ''),
   salvarRevisor: (patch: RevisorSettings) => call<RevisorSettings>('ia.salvarAjustes', 'revisor', patch),
   ideias: (dir: string, file: string, pedido?: string) => call<IdeiasResult>('ia.ideias', dir, file, pedido ?? ''),
   sinonimos: (palavra: string, frase: string) => call<SinonimosResult>('ia.sinonimos', palavra, frase),

@@ -1,4 +1,5 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
+import { call } from './api'
 import type { Project } from '../../shared/types'
 import { Icon, type IconName } from './icons'
 import { THEMES, THEME_ORDER, applyTheme, savedTheme, type ThemeKey } from './themes'
@@ -13,6 +14,9 @@ import { Idioma } from './screens/Idioma'
 import { Revisor } from './screens/Revisor'
 import { Arte } from './screens/Arte'
 import { Ajustes } from './screens/Ajustes'
+import { PainelInsights } from './features/insights/Painel'
+import { insightsStore, useInsights } from './features/insights/store'
+import { guardaRascunho } from './features/manuscrito/rascunho'
 
 interface RailItem {
   icon: IconName
@@ -78,7 +82,12 @@ export function App(): ReactElement {
   const [project, setProject] = useState<Project | null>(null)
   const [theme, setTheme] = useState<ThemeKey>(savedTheme())
 
+  const ins = useInsights()
+
   const go = (s: Screen, p: NavParams = {}): void => {
+    // rascunho da IA pendente no Manuscrito: perguntar antes de sair
+    if (screen === 'manuscrito' && s !== 'manuscrito' && !guardaRascunho.confirmarSaida()) return
+    if (s !== 'manuscrito') guardaRascunho.pendente = false
     setParams(p)
     setScreen(s)
   }
@@ -87,6 +96,28 @@ export function App(): ReactElement {
     applyTheme(k)
     setTheme(k)
   }
+
+  // insights do livro aberto: resumo do dia na abertura e polling leve (20 s) só com a aba visível
+  const dir = project?.dir ?? ''
+  useEffect(() => {
+    insightsStore.usarLivro(dir)
+    if (!dir) return
+    void call('insights.resumoDia', dir)
+      .catch(() => null)
+      .then(() => insightsStore.atualizar())
+    const id = setInterval(() => {
+      if (!document.hidden) void insightsStore.atualizar()
+    }, 20_000)
+    const onVis = (): void => {
+      if (!document.hidden) void insightsStore.atualizar()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [dir])
+  const novos = ins.dir === dir ? ins.lista.filter((i) => i.status === 'novo').length : 0
 
   const railButton = (it: RailItem): ReactElement => {
     const needsBook = !NO_BOOK.includes(it.screen)
@@ -120,6 +151,23 @@ export function App(): ReactElement {
             <b>{CRUMB[screen]}</b>
           </span>
         </div>
+        {project && (
+          <button
+            type="button"
+            className="sino"
+            aria-expanded={ins.painel}
+            aria-label={novos ? `Insights: ${novos} ${novos === 1 ? 'novo' : 'novos'}` : 'Insights'}
+            title="Insights do livro: observações do modo proativo"
+            onClick={() => (ins.painel ? insightsStore.fechar() : insightsStore.abrir())}
+          >
+            <Icon name="sino" size={21} />
+            {novos > 0 && (
+              <span className="sino-n" aria-hidden="true">
+                {novos > 99 ? '99+' : novos}
+              </span>
+            )}
+          </button>
+        )}
         <div className="themes" role="group" aria-label="Tema">
           <span className="label">{THEMES[theme].name}</span>
           {THEME_ORDER.map((k) => (
@@ -159,6 +207,7 @@ export function App(): ReactElement {
         {screen === 'ajustes' && <Ajustes />}
         {Current && project && <Current key={`${screen}-${project.dir}`} project={project} onProject={setProject} go={go} params={params} />}
       </div>
+      {project && ins.painel && <PainelInsights project={project} go={go} />}
     </div>
   )
 }

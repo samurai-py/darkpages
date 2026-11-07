@@ -33,6 +33,10 @@ interface Props {
   onIgnorar: (c: Conflito) => void
   /** salva o capítulo antes de chamadas de IA que leem o arquivo */
   antesDaIA: () => Promise<void>
+  /** "Escrever no texto": a IA redige a ideia no ponto do cursor como rascunho */
+  onRedigir: (ideia: Ideia) => Promise<void>
+  /** já existe um rascunho sendo escrito/pendente */
+  redigindo: boolean
 }
 
 /** Retratos carregados uma vez por livro (data URL ou null). */
@@ -438,6 +442,8 @@ interface IdeiaUI extends Ideia {
   noEnredo?: boolean
   anotada?: boolean
   variando?: boolean
+  escrevendo?: boolean
+  escrita?: boolean
 }
 
 function PainelIdeias(p: Props): ReactElement {
@@ -527,6 +533,18 @@ function PainelIdeias(p: Props): ReactElement {
     setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, anotada: true } : i)))
   }
 
+  const escrever = async (alvo: IdeiaUI): Promise<void> => {
+    setErro(null)
+    setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, escrevendo: true } : i)))
+    try {
+      await p.onRedigir({ tipo: alvo.tipo, texto: alvo.texto, ligadoA: alvo.ligadoA })
+      setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, escrevendo: false, escrita: true } : i)))
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
+      setIdeias((v) => v.map((i) => (i.uid === alvo.uid ? { ...i, escrevendo: false } : i)))
+    }
+  }
+
   const visiveis = ideias.filter((i) => filtro === 'tudo' || i.tipo === filtro)
 
   return (
@@ -571,10 +589,31 @@ function PainelIdeias(p: Props): ReactElement {
             </div>
             <p className={i.variando ? 'ms-variando' : ''}>{i.texto}</p>
             <div className="ms-ideia-a">
-              <button type="button" className="ms-chip sm" disabled={i.noEnredo} onClick={() => void paraEnredo(i)}>
+              <button
+                type="button"
+                className="ms-chip sm"
+                disabled={p.redigindo || i.escrevendo}
+                onClick={() => void escrever(i)}
+                title="A IA escreve 1 a 3 parágrafos com esta ideia no ponto do cursor (ou no fim do capítulo), na sua voz. Fica marcado como rascunho até você aceitar, refazer ou descartar."
+              >
+                {i.escrevendo ? 'Escrevendo…' : i.escrita ? 'Escrever de novo' : 'Escrever no texto'}
+              </button>
+              <button
+                type="button"
+                className="ms-chip sm"
+                disabled={i.noEnredo}
+                onClick={() => void paraEnredo(i)}
+                title="Cria um cartão com esta ideia no quadro do Enredo, ligado a este capítulo. O texto não muda."
+              >
                 {i.noEnredo ? 'No Enredo' : '→ Cartão no Enredo'}
               </button>
-              <button type="button" className="ms-chip sm" disabled={i.anotada} onClick={() => anotar(i)}>
+              <button
+                type="button"
+                className="ms-chip sm"
+                disabled={i.anotada}
+                onClick={() => anotar(i)}
+                title="Guarda a ideia nas notas da cena (aba Cena). O texto não muda."
+              >
                 {i.anotada ? 'Anotada' : 'Anotar'}
               </button>
               <button type="button" className="ms-chip sm" disabled={i.variando} onClick={() => void variar(i)} aria-label={`Gerar variação: ${i.texto}`}>

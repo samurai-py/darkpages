@@ -9,6 +9,14 @@ import type { SinonimosResult } from '../../../../shared/models'
 import { Cena, Marcas, Nota, marcasKey, type Furo } from './extensions'
 import { analisarRepeticoes, contarRadical, fmt, manterCaixa, type Repeticao } from './texto'
 import { Ico } from './icones'
+import { RascunhoIa, docSemRascunho, markdownSemRascunho, temRascunho } from './rascunho'
+
+/** Rascunho da IA mostrado no editor (ver rascunho.ts). */
+export interface RascunhoUI {
+  id: string
+  carregando: boolean
+  erro: string | null
+}
 
 interface Props {
   /** Markdown inicial do capítulo (o editor é recriado a cada capítulo via `key`) */
@@ -16,12 +24,17 @@ interface Props {
   rotulo: string
   titulo: string
   onTitulo: (t: string) => void
-  onChange: (markdown: string, texto: string) => void
+  /** markdown e texto SEM o rascunho pendente da IA; `rascunho` diz se ainda há rascunho no editor */
+  onChange: (markdown: string, texto: string, rascunho: boolean) => void
   onEditor: (e: Editor | null) => void
   repeticoes: boolean
   furos: Furo[]
   corpoPx: number
   linha: number
+  rascunho: RascunhoUI | null
+  onAceitar: () => void
+  onRefazer: () => void
+  onDescartar: () => void
 }
 
 interface PopRep {
@@ -109,7 +122,8 @@ export function ChapterEditor(p: Props): ReactElement {
       Markdown.configure({ html: false, tightLists: true, linkify: false, breaks: false, transformPastedText: true }),
       Nota,
       Cena,
-      Marcas
+      Marcas,
+      RascunhoIa
     ],
     content: p.inicial,
     editorProps: {
@@ -147,8 +161,14 @@ export function ChapterEditor(p: Props): ReactElement {
       }
     },
     onUpdate: ({ editor: e }) => {
+      // o rascunho da IA nunca vai para o arquivo enquanto não for aceito
+      if (temRascunho(e.state.doc)) {
+        const doc = docSemRascunho(e)
+        props.current.onChange(markdownSemRascunho(e), doc.textBetween(0, doc.content.size, '\n\n', ' '), true)
+        return
+      }
       const md = (e.storage as { markdown: { getMarkdown(): string } }).markdown.getMarkdown()
-      props.current.onChange(md, e.getText())
+      props.current.onChange(md, e.getText(), false)
     }
   })
 
@@ -229,6 +249,30 @@ export function ChapterEditor(p: Props): ReactElement {
     return () => dom.removeEventListener('folio:nota', onNova)
   }, [editor])
 
+  // posição da mini barra do rascunho (abaixo do último parágrafo do rascunho)
+  const [barra, setBarra] = useState<{ x: number; y: number } | null>(null)
+  const rascunhoId = p.rascunho?.id ?? null
+  useEffect(() => {
+    if (!rascunhoId) {
+      setBarra(null)
+      return
+    }
+    const t = setTimeout(() => {
+      const base = pagina.current
+      if (!base) return
+      const els = base.querySelectorAll<HTMLElement>(`.ms-rascunho[data-rascunho="${CSS.escape(rascunhoId)}"]`)
+      const ult = els[els.length - 1]
+      if (!ult) {
+        setBarra(null)
+        return
+      }
+      const b = base.getBoundingClientRect()
+      const r = ult.getBoundingClientRect()
+      setBarra({ x: Math.max(8, Math.min(r.left - b.left, b.width - 330)), y: r.bottom - b.top + 10 })
+    }, 30)
+    return () => clearTimeout(t)
+  }, [rascunhoId, versao, p.rascunho?.carregando, p.corpoPx, p.linha])
+
   const formas = rep ? Object.entries(rep.info.formas).sort((a, b) => b[1] - a[1]) : []
 
   return (
@@ -298,6 +342,28 @@ export function ChapterEditor(p: Props): ReactElement {
           )}
           {rep.sinonimos && rep.sinonimos.sinonimos.length === 0 && rep.sinonimos.fortes.length === 0 && (
             <p className="ms-pop-msg">Nenhuma alternativa sugerida.</p>
+          )}
+        </div>
+      )}
+
+      {p.rascunho && barra && (
+        <div className="ms-rbar" role="toolbar" aria-label="Rascunho da IA" style={{ left: barra.x, top: barra.y }}>
+          <span className="ms-rbar-t">
+            <Ico n="brilho" size={13} /> {p.rascunho.carregando ? 'Reescrevendo…' : 'Rascunho da IA'}
+          </span>
+          <button type="button" className="btn sm pri" disabled={p.rascunho.carregando} onClick={p.onAceitar} title="Vira texto normal do capítulo e é salvo">
+            Aceitar
+          </button>
+          <button type="button" className="btn sm" disabled={p.rascunho.carregando} onClick={p.onRefazer} title="Pede outra versão do mesmo trecho">
+            Refazer
+          </button>
+          <button type="button" className="btn sm" disabled={p.rascunho.carregando} onClick={p.onDescartar} title="Apaga o rascunho; nada foi salvo">
+            Descartar
+          </button>
+          {p.rascunho.erro && (
+            <span className="ms-rbar-e" role="alert">
+              {p.rascunho.erro}
+            </span>
           )}
         </div>
       )}

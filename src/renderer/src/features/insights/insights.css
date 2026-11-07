@@ -1,0 +1,50 @@
+/* ---------- Insights (modo proativo) — DONO: IA ---------- */
+.sino { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  background: transparent; border: 1px solid transparent; color: var(--muted); cursor: pointer;
+  transition: color .2s var(--ease), border-color .2s var(--ease), background-color .2s var(--ease); }
+.sino:hover, .sino[aria-expanded='true'] { color: var(--text); border-color: var(--line); background: var(--panel); }
+.sino-n { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--accs); color: var(--accink); font-size: 10.5px; font-weight: 700; line-height: 18px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bar); }
+
+.ins { position: fixed; z-index: 40; top: 60px; right: 0; bottom: 0; width: min(420px, 100vw);
+  display: flex; flex-direction: column; background: var(--bg); color: var(--text); border-left: 1px solid var(--line);
+  box-shadow: -18px 0 40px -26px var(--shadow); animation: insIn .35s var(--ease) both; }
+@keyframes insIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ins { animation: none; } }
+.ins-h { display: flex; align-items: center; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.ins-h h2 { margin: 0; font-size: 24px; }
+.ins-livro { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.ins-res { grid-column: 1 / -1; font-size: 12.5px; }
+.ins-lista { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px 24px; display: flex; flex-direction: column; gap: 12px; }
+.ins-vazio { margin: 24px 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.ins-item { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: calc(var(--rad) + 2px); }
+.ins-item.novo::before { content: ''; position: absolute; top: 15px; right: 14px; width: 7px; height: 7px; border-radius: 50%; background: var(--acc); }
+.ins-item.feito { opacity: .6; }
+.ins-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-right: 16px; }
+.ins-tag { font-size: 10.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--acc); }
+.ins-cap, .ins-origem { font-size: 11px; color: var(--muted); background: var(--chipbg); border-radius: 999px; padding: 1px 8px; }
+.ins-trecho { margin: 0; padding: 6px 10px; border-radius: var(--rad); background: var(--hl); font-size: 12.5px; line-height: 1.5; font-style: italic; }
+.ins-texto { margin: 0; font-size: 13.5px; line-height: 1.55; white-space: pre-line; }
+.ins-troca { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.ins-troca del { color: var(--muted); }
+.ins-troca ins { text-decoration: none; background: var(--hl); padding: 0 3px; border-radius: 3px; }
+.ins-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.ins-quieto { color: var(--muted); }
+.ins-ok { margin: 0; font-size: 12.5px; color: var(--acc2); }
+.ins-rodape { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+.ins-rodape .dot { flex: none; }
+
+/* aviso discreto na margem do Manuscrito */
+.ms-ins-margem { position: absolute; z-index: 5; top: 74px; right: 18px; display: inline-flex; align-items: center; gap: 8px;
+  max-width: 200px; padding: 8px 12px; font: inherit; font-size: 12px; line-height: 1.35; text-align: left; cursor: pointer;
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--rad) + 2px);
+  box-shadow: 0 10px 22px -14px var(--shadow); animation: insIn .4s var(--ease) both;
+  transition: border-color .2s var(--ease); }
+.ms-ins-margem:hover { border-color: var(--acc); }
+.ms-ins-margem svg { flex: none; color: var(--acc); }
+@media (max-width: 1100px) { .ms-ins-margem { top: auto; bottom: 70px; } }
+.topbar .sino { margin-left: auto; }
+.topbar .sino + .themes { margin-left: 0; }

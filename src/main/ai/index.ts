@@ -36,6 +36,11 @@ export interface AiRequest {
   esforco?: 'low' | 'medium' | 'high'
   /** tempo limite em ms (padrão: 5 min local, 2 min nuvem) */
   timeoutMs?: number
+  /**
+   * Tarefa automática (modo proativo): nas assinaturas usa o "modelo para
+   * tarefas automáticas" (claudeCliModelAuto/codexCliModelAuto).
+   */
+  automatico?: boolean
 }
 
 import { chatViaCli, conversaComoTexto } from './cli'
@@ -53,6 +58,14 @@ export interface AiSettings {
   openaiModel: string
   geminiKey: string
   geminiModel: string
+  /** modelo do Claude Code ('' = padrão do programa; aceita apelido como haiku/sonnet/opus ou nome completo) */
+  claudeCliModel: string
+  /** modelo do Codex ('' = padrão do programa) */
+  codexCliModel: string
+  /** modelo do Claude Code para tarefas automáticas (modo proativo); padrão o mais leve */
+  claudeCliModelAuto: string
+  /** modelo do Codex para tarefas automáticas ('' = o mesmo do uso normal) */
+  codexCliModelAuto: string
 }
 
 export const AI_DEFAULTS: AiSettings = {
@@ -64,7 +77,11 @@ export const AI_DEFAULTS: AiSettings = {
   openaiKey: '',
   openaiModel: 'gpt-5.4-mini-2026-03-17',
   geminiKey: '',
-  geminiModel: 'gemini-3.8-flash'
+  geminiModel: 'gemini-3.8-flash',
+  claudeCliModel: '',
+  codexCliModel: '',
+  claudeCliModelAuto: 'haiku',
+  codexCliModelAuto: ''
 }
 
 export const ANTHROPIC_VERSION = '2026-10-21'
@@ -111,11 +128,19 @@ export function modeloAtivo(s: AiSettings): string {
     case 'gemini':
       return s.geminiModel
     case 'claude-cli':
+      return s.claudeCliModel || 'padrão do Claude Code'
     case 'codex-cli':
-      return 'assinatura'
+      return s.codexCliModel || 'padrão do Codex'
     default:
       return ''
   }
+}
+
+/** Modelo usado nas tarefas automáticas (modo proativo). '' = padrão do programa. */
+export function modeloAutomatico(s: AiSettings): string {
+  if (s.provider === 'claude-cli') return s.claudeCliModelAuto || s.claudeCliModel
+  if (s.provider === 'codex-cli') return s.codexCliModelAuto || s.codexCliModel
+  return modeloAtivo(s)
 }
 
 /** true quando o texto do livro sai desta máquina/rede ao usar o provedor. */
@@ -158,6 +183,14 @@ export async function salvarAiSettings(ctx: Ctx, patch: Record<string, unknown>)
     ['geminiModel', 'Gemini']
   ] as const) {
     if (k in patch) out[k] = patch[k] === '' && k === 'ollamaModel' ? '' : checaModelo(patch[k], rot)
+  }
+  for (const [k, rot] of [
+    ['claudeCliModel', 'Claude Code'],
+    ['codexCliModel', 'Codex'],
+    ['claudeCliModelAuto', 'Claude Code (tarefas automáticas)'],
+    ['codexCliModelAuto', 'Codex (tarefas automáticas)']
+  ] as const) {
+    if (k in patch) out[k] = typeof patch[k] === 'string' && patch[k].trim() === '' ? '' : checaModelo(typeof patch[k] === 'string' ? patch[k].trim() : patch[k], rot)
   }
   for (const k of ['anthropicKey', 'openaiKey', 'geminiKey'] as const) {
     if (k in patch) {
@@ -387,8 +420,17 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
     }
 
     case 'claude-cli':
-    case 'codex-cli':
-      return chatViaCli(s.provider === 'claude-cli' ? 'claude' : 'codex', system, conversaComoTexto(req.messages), req.timeoutMs ?? 600_000)
+    case 'codex-cli': {
+      const normal = s.provider === 'claude-cli' ? s.claudeCliModel : s.codexCliModel
+      const modelo = req.automatico ? modeloAutomatico(s) : normal
+      return chatViaCli(
+        s.provider === 'claude-cli' ? 'claude' : 'codex',
+        system,
+        conversaComoTexto(req.messages),
+        req.timeoutMs ?? 600_000,
+        modelo ? checaModelo(modelo, s.provider === 'claude-cli' ? 'Claude Code' : 'Codex') : ''
+      )
+    }
 
     case 'gemini': {
       if (!s.geminiKey) throw new Error('Chave do Gemini não configurada. Cole a chave em Ajustes → IA.')

@@ -3,7 +3,13 @@ import type { Editor } from '@tiptap/react'
 import type { ScreenProps } from '../screen'
 import { call, folio } from '../api'
 import { countWords, type ChapterContent, type ChapterKind, type Project } from '../../../shared/types'
-import type { CenaMeta, Conflito, Ficha } from '../../../shared/models'
+import type { CenaMeta, Conflito, Ficha, Insight, ProativoEstado } from '../../../shared/models'
+import { ia } from '../features/ia/api'
+import { aceitarRascunho, descartarRascunho, guardaRascunho, inserirRascunho, pontoDeInsercao, type PontoInsercao } from '../features/manuscrito/rascunho'
+import type { RascunhoUI } from '../features/manuscrito/ChapterEditor'
+import { insightsStore, useInsights } from '../features/insights/store'
+import { ponte } from '../features/insights/ponte'
+import { Icon } from '../icons'
 import { useAutosave, type SaveState } from '../useAutosave'
 import { ChapterEditor } from '../features/manuscrito/ChapterEditor'
 import { ChapterList, rotuloLongo, type Metas } from '../features/manuscrito/ChapterList'
@@ -16,6 +22,12 @@ import type { Furo } from '../features/manuscrito/extensions'
 import { SyncStatus } from '../features/sync/SyncStatus'
 import { SpotifyPlayer } from '../features/spotify/Player'
 import './manuscrito.css'
+
+interface RascunhoEstado extends RascunhoUI {
+  file: string
+  ideia: { tipo: string; texto: string }
+  ponto: PontoInsercao
+}
 
 interface Draft {
   file: string
@@ -134,6 +146,25 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
   const root = useRef<HTMLDivElement>(null)
   const bodyRef = useRef('')
 
+  // rascunho da IA (Escrever no texto) e modo proativo
+  const [rascunho, setRascunho] = useState<RascunhoEstado | null>(null)
+  const rascunhoRef = useRef<RascunhoEstado | null>(null)
+  rascunhoRef.current = rascunho
+  const [recarga, setRecarga] = useState(0)
+  const [proativo, setProativo] = useState<ProativoEstado | null>(null)
+  const currentRef = useRef(current)
+  currentRef.current = current
+  const editorRef = useRef<Editor | null>(null)
+  editorRef.current = editor
+  const focoRef = useRef(false)
+  focoRef.current = foco
+  /** o editor já teve foco neste capítulo (o cursor vale como ponto de inserção) */
+  const teveFoco = useRef(false)
+  /** houve edição neste capítulo desde que foi aberto (para o gatilho de troca) */
+  const editouCap = useRef(false)
+  const pausaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const insState = useInsights()
+
   const setVisual = (v: Partial<typeof VISUAL_PADRAO>): void => {
     setVisualState((old) => {
       const n = { ...old, ...v }
@@ -192,13 +223,16 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
         setConflitos([])
         setErroCont(null)
         setToasts((v) => v.filter((t) => t.tipo !== 'furo'))
+        setRascunho(null)
+        teveFoco.current = false
+        editouCap.current = false
         setCarga((n) => n + 1)
       })
       .catch((e: unknown) => alive && setError(msg(e)))
     return () => {
       alive = false
     }
-  }, [current, dir])
+  }, [current, dir, recarga])
 
   useEffect(() => {
     let alive = true
@@ -235,7 +269,14 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
 
   const switchTo = async (file: string): Promise<void> => {
     if (file === current) return
+    if (!guardaRascunho.confirmarSaida()) return
+    setRascunho(null)
     await flushAll()
+    if (pausaTimer.current) clearTimeout(pausaTimer.current)
+    // gatilho "troca de capítulo" do modo proativo: analisa o capítulo que ficou para trás
+    if (current && editouCap.current && proativo && proativo.config.modo !== 'off' && !foco) {
+      call('insights.pausa', dir, current, { motivo: 'troca', foco: false }).catch(() => undefined)
+    }
     setBusca(false)
     setCurrent(file)
   }
@@ -249,12 +290,169 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
     }
   }, [])
 
-  const onChange = (md: string, t: string): void => {
+  /** gatilho "pausa" do modo proativo: N s sem digitar, depois de salvar */
+  const agendarPausa = (): void => {
+    if (pausaTimer.current) clearTimeout(pausaTimer.current)
+    if (!proativo || proativo.config.modo === 'off') return
+    const file = currentRef.current
+    pausaTimer.current = setTimeout(() => {
+      if (focoRef.current || !file || file !== currentRef.current) return
+      void corpo
+        .flush()
+        .then(() => call('insights.pausa', dir, file, { motivo: 'pausa', foco: focoRef.current }))
+        .catch(() => undefined)
+    }, proativo.config.pausaS * 1000)
+  }
+
+  const onChange = (md: string, t: string, temRascunho: boolean): void => {
     if (!current) return
     bodyRef.current = md
     setTexto(t)
+    // o autor apagou o rascunho à mão: some a barra
+    if (!temRascunho) setRascunho((r) => (r && !r.carregando ? null : r))
     corpo.schedule({ file: current, title: title.trim() || 'Sem título', body: md })
+    editouCap.current = true
+    agendarPausa()
   }
+
+  // ------------------------------------------------------------ escrever no texto (rascunho da IA)
+
+  useEffect(() => {
+    if (!editor) return
+    const onFocus = (): void => {
+      teveFoco.current = true
+    }
+    editor.on('focus', onFocus)
+    return () => {
+      editor.off('focus', onFocus)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    guardaRascunho.pendente = !!rascunho
+    if (!rascunho) return
+    const onUnload = (e: BeforeUnloadEvent): void => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [rascunho])
+  useEffect(
+    () => () => {
+      guardaRascunho.pendente = false
+      if (pausaTimer.current) clearTimeout(pausaTimer.current)
+    },
+    []
+  )
+
+  const mostrarRascunho = (id: string): void => {
+    setTimeout(() => {
+      document.querySelector(`.ms-rascunho[data-rascunho="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 60)
+  }
+
+  const redigir = async (ideia: { tipo: string; texto: string }, usarCursor: boolean): Promise<void> => {
+    const ed = editorRef.current
+    const file = currentRef.current
+    if (!ed || ed.isDestroyed || !file) throw new Error('Abra um capítulo primeiro.')
+    const pend = rascunhoRef.current
+    if (pend) {
+      if (pend.carregando) throw new Error('Espere o rascunho atual terminar.')
+      if (!window.confirm('Já há um rascunho da IA pendente neste capítulo. Descartar e escrever outro?')) return
+      descartarRascunho(ed, pend.id)
+      setRascunho(null)
+    }
+    const ponto = pontoDeInsercao(ed, usarCursor && teveFoco.current)
+    await corpo.flush()
+    toast({ id: 'redigir', tipo: 'info', titulo: 'Escrevendo no texto', texto: 'A IA está redigindo a ideia na sua voz. O texto entra como rascunho.' })
+    try {
+      const r = await ia.redigir(dir, file, ideia, { antes: ponto.antes, depois: ponto.depois })
+      const atual = editorRef.current
+      if (currentRef.current !== file || !atual || atual.isDestroyed) return
+      const id = `r${Date.now().toString(36)}`
+      // o autor pode ter digitado enquanto a IA escrevia: recalcula o ponto
+      if (!inserirRascunho(atual, r.texto, id, pontoDeInsercao(atual, usarCursor && teveFoco.current))) throw new Error('A IA não devolveu texto aproveitável.')
+      setRascunho({ id, file, ideia, ponto, carregando: false, erro: null })
+      mostrarRascunho(id)
+    } finally {
+      fecharToast('redigir')
+    }
+  }
+
+  const aceitar = (): void => {
+    const ed = editorRef.current
+    const r = rascunhoRef.current
+    if (!ed || !r) return
+    aceitarRascunho(ed, r.id)
+    setRascunho(null)
+  }
+
+  const descartar = (): void => {
+    const ed = editorRef.current
+    const r = rascunhoRef.current
+    if (!ed || !r) return
+    descartarRascunho(ed, r.id)
+    setRascunho(null)
+  }
+
+  const refazer = async (): Promise<void> => {
+    const r = rascunhoRef.current
+    if (!r || r.carregando) return
+    setRascunho({ ...r, carregando: true, erro: null })
+    try {
+      const novo = await ia.redigir(dir, r.file, r.ideia, { antes: r.ponto.antes, depois: r.ponto.depois }, 'Escreva uma versão diferente da anterior, com outra abordagem, mantendo a ideia.')
+      const ed = editorRef.current
+      if (!ed || ed.isDestroyed || currentRef.current !== r.file) return
+      inserirRascunho(ed, novo.texto, r.id, pontoDeInsercao(ed, false))
+      setRascunho((x) => (x && x.id === r.id ? { ...x, carregando: false } : x))
+      mostrarRascunho(r.id)
+    } catch (e) {
+      setRascunho((x) => (x && x.id === r.id ? { ...x, carregando: false, erro: msg(e) } : x))
+    }
+  }
+
+  // "Escrever no texto" pedido pelo painel de Insights (go('manuscrito', { chapter, redigir: id }))
+  const redigirFeito = useRef('')
+  useEffect(() => {
+    const id = params.redigir
+    const chave = `${id ?? ''}|${params.n ?? ''}`
+    if (!id || redigirFeito.current === chave || !editor || editor.isDestroyed || !chapter || chapter.file !== current) return
+    if (params.chapter && params.chapter !== current) return
+    redigirFeito.current = chave
+    void (async () => {
+      try {
+        const ins = await folio.docs.get<Insight>(dir, 'insights', id)
+        if (!ins) throw new Error('Esse insight não existe mais.')
+        const ideia = ins.acao?.tipo === 'redigir' ? ins.acao.ideia : { tipo: ins.tipo, texto: ins.texto }
+        await redigir(ideia, false)
+      } catch (e) {
+        toast({ id: 'redigir-erro', tipo: 'erro', titulo: 'Não deu para escrever no texto', texto: msg(e) })
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.redigir, params.n, params.chapter, editor, chapter, current])
+
+  // modo proativo: configuração (pausa, modo) e ponte para o painel de Insights
+  useEffect(() => {
+    ia.proativo()
+      .then(setProativo)
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    ponte.atual = {
+      file: current,
+      flush: flushAll,
+      recarregar: (f) => {
+        if (f === currentRef.current) setRecarga((n) => n + 1)
+      },
+      rascunhoPendente: () => !!rascunhoRef.current
+    }
+    return () => {
+      ponte.atual = null
+    }
+  }, [current, flushAll])
+  const novosNoCap =
+    !foco && current && insState.dir === dir ? insState.lista.filter((i) => i.capitulo === current && i.status === 'novo' && i.tipo !== 'resumo').length : 0
 
   const onTitulo = (t: string): void => {
     setTitle(t)
@@ -489,6 +687,10 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
               furos={furos}
               corpoPx={visual.corpoPx}
               linha={visual.linha}
+              rascunho={rascunho && rascunho.file === chapter.file ? rascunho : null}
+              onAceitar={aceitar}
+              onRefazer={() => void refazer()}
+              onDescartar={descartar}
             />
           ) : (
             !error &&
@@ -508,6 +710,20 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
             )
           )}
         </div>
+
+        {novosNoCap > 0 && !insState.painel && (
+          <button
+            type="button"
+            className="ms-ins-margem"
+            onClick={() => insightsStore.abrir(current ?? '')}
+            title="Abrir o painel de Insights deste capítulo"
+          >
+            <Icon name="sino" size={16} />
+            <span>
+              {novosNoCap} {novosNoCap === 1 ? 'observação nova' : 'observações novas'} neste capítulo
+            </span>
+          </button>
+        )}
 
         <div className="ms-spotify">
           <SpotifyPlayer />
@@ -594,6 +810,8 @@ export function Manuscrito({ project, onProject, go, params }: ScreenProps): Rea
           onAbrirFicha={(id) => void abrirFicha(id)}
           onIgnorar={(c) => void ignorar(c)}
           antesDaIA={flushAll}
+          onRedigir={(i) => redigir({ tipo: i.tipo, texto: i.ligadoA ? `${i.texto} (ligado a: ${i.ligadoA})` : i.texto }, true)}
+          redigindo={!!rascunho?.carregando}
         />
       )}
 
