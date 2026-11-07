@@ -3,7 +3,7 @@ import type { BetaLeitura, Conflito, IdeiasResult, SinonimosResult, Sugestao } f
 
 /** Chamadas tipadas da feature IA (métodos "ia.*" do processo principal). */
 
-export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini'
+export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'claude-cli' | 'codex-cli'
 export type LtModo = 'off' | 'local' | 'publico'
 
 export interface SugestaoModelo {

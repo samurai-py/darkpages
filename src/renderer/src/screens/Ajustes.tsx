@@ -20,6 +20,8 @@ const SECOES: Array<{ id: Secao; nome: string; desc: string }> = [
 const PROVEDORES: Array<{ id: Provedor; nome: string; desc: string; externo: boolean }> = [
   { id: 'off', nome: 'Desligada', desc: 'Nenhum recurso de IA é usado.', externo: false },
   { id: 'ollama', nome: 'Ollama', desc: 'Roda no seu computador, offline.', externo: false },
+  { id: 'claude-cli', nome: 'Claude · assinatura', desc: 'Usa seu Claude Pro/Max pelo Claude Code logado neste computador. Sem chave.', externo: true },
+  { id: 'codex-cli', nome: 'ChatGPT · assinatura', desc: 'Usa seu ChatGPT Plus/Pro pelo Codex logado neste computador. Sem chave.', externo: true },
   { id: 'anthropic', nome: 'Claude', desc: 'Anthropic, com sua chave.', externo: true },
   { id: 'openai', nome: 'ChatGPT', desc: 'OpenAI, com sua chave.', externo: true },
   { id: 'gemini', nome: 'Gemini', desc: 'Google, com sua chave.', externo: true }

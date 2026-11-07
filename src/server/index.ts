@@ -112,6 +112,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function send(res: ServerResponse, status: number, body: string, type = 'application/json; charset=utf-8'): void {
+  if (status >= 400) console.error(`[${new Date().toISOString()}] ${status} ${body.slice(0, 200)}`)
   const headers: Record<string, string> = { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }
   if (type.startsWith('text/html')) {
     headers['set-cookie'] = `${COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict`
@@ -154,7 +155,7 @@ const server = createServer((req, res) => {
   void (async () => {
     const url = new URL(req.url ?? '/', 'http://folio')
     try {
-      if (!hostOk(req.headers.host)) return send(res, 421, '{"error":"host não reconhecido"}')
+      if (!hostOk(req.headers.host)) return send(res, 421, JSON.stringify({ error: `host não reconhecido: ${String(req.headers.host)}` }))
       const origin = req.headers.origin
       if (origin && !hostOk(origin.replace(/^https?:\/\//, ''))) return send(res, 403, '{"error":"origem não permitida"}')
       const needsToken = url.pathname.startsWith('/api/') || url.pathname.startsWith('/files/')
@@ -178,6 +179,7 @@ const server = createServer((req, res) => {
       if (extname(full) !== '.html' && (await serveFile(res, full))) return
       return send(res, 200, await readFile(join(STATIC, 'index.html'), 'utf8'), MIME['.html'])
     } catch (e) {
+      console.error(`[erro] ${url.pathname}`, e instanceof Error ? e.message : e)
       return send(res, 500, JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }))
     }
   })()

@@ -38,8 +38,10 @@ export interface AiRequest {
   timeoutMs?: number
 }
 
-export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini'
-export const PROVEDORES: Provedor[] = ['off', 'ollama', 'anthropic', 'openai', 'gemini']
+import { chatViaCli, conversaComoTexto } from './cli'
+
+export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'claude-cli' | 'codex-cli'
+export const PROVEDORES: Provedor[] = ['off', 'ollama', 'claude-cli', 'codex-cli', 'anthropic', 'openai', 'gemini']
 
 export interface AiSettings {
   provider: Provedor
@@ -108,6 +110,9 @@ export function modeloAtivo(s: AiSettings): string {
       return s.openaiModel
     case 'gemini':
       return s.geminiModel
+    case 'claude-cli':
+    case 'codex-cli':
+      return 'assinatura'
     default:
       return ''
   }
@@ -115,7 +120,7 @@ export function modeloAtivo(s: AiSettings): string {
 
 /** true quando o texto do livro sai desta máquina/rede ao usar o provedor. */
 export function provedorExterno(p: Provedor): boolean {
-  return p === 'anthropic' || p === 'openai' || p === 'gemini'
+  return p === 'anthropic' || p === 'openai' || p === 'gemini' || p === 'claude-cli' || p === 'codex-cli'
 }
 
 export const NOME_PROVEDOR: Record<Provedor, string> = {
@@ -123,7 +128,9 @@ export const NOME_PROVEDOR: Record<Provedor, string> = {
   ollama: 'Ollama (local)',
   anthropic: 'Claude (Anthropic)',
   openai: 'ChatGPT (OpenAI)',
-  gemini: 'Gemini (Google)'
+  gemini: 'Gemini (Google)',
+  'claude-cli': 'Claude (sua assinatura, via Claude Code)',
+  'codex-cli': 'ChatGPT (sua assinatura, via Codex)'
 }
 
 const MODELO_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$/
@@ -378,6 +385,10 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
       }
       return text
     }
+
+    case 'claude-cli':
+    case 'codex-cli':
+      return chatViaCli(s.provider === 'claude-cli' ? 'claude' : 'codex', system, conversaComoTexto(req.messages), req.timeoutMs ?? 600_000)
 
     case 'gemini': {
       if (!s.geminiKey) throw new Error('Chave do Gemini não configurada. Cole a chave em Ajustes → IA.')
