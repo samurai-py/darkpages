@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { Editor } from '@tiptap/react'
 import { call } from '../../api'
-import type { ResultadoRevisorCorrigir } from '../../../../shared/corrigir'
+import type { AchadoIa, ResultadoIaCorrigir, ResultadoRevisorCorrigir, SugestaoCorrigir } from '../../../../shared/corrigir'
 import { Modal } from './Modal'
 import { Ico } from './icones'
 import './corrigir.css'
@@ -33,14 +33,28 @@ const TITULO: Record<EscopoCorrecao, string> = {
   capitulo: 'Corrigir capítulo'
 }
 
-const ORDEM: TipoCorrecao[] = ['ortografia', 'gramatica', 'dialogo', 'travessao', 'aspas', 'reticencias', 'pontuacao', 'espacos', 'vazios']
+const ORDEM: TipoCorrecao[] = ['ortografia', 'gramatica', 'repeticao', 'estilo', 'dialogo', 'travessao', 'aspas', 'reticencias', 'pontuacao', 'espacos', 'vazios']
 /** acima disso a lista mostra só o começo (os tipos continuam marcando/desmarcando tudo) */
 const MAX_LINHAS = 400
 
 type EstadoLt =
   | { fase: 'carregando' }
-  | { fase: 'pronto'; modo: ResultadoRevisorCorrigir['modo']; correcoes: Correcao[] }
+  | { fase: 'pronto'; modo: ResultadoRevisorCorrigir['modo']; correcoes: Correcao[]; sugestoes: SugestaoCorrigir[] }
   | { fase: 'indisponivel'; aviso: string }
+
+type EstadoIa =
+  | { fase: 'parado' }
+  | { fase: 'rodando'; parte: number; total: number; achadas: number }
+  | { fase: 'pronto'; correcoes: Correcao[]; avisos: string[]; parcial: boolean }
+  | { fase: 'erro'; aviso: string; correcoes: Correcao[] }
+
+interface StatusIa {
+  provedor: string
+  nomeProvedor: string
+  modelo: string
+  externo: boolean
+  configurado: boolean
+}
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -70,15 +84,34 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
   })
   const locais = useMemo(() => (base ? correcoesLocais(base.doc, base.de, base.ate) : []), [base])
   const [lt, setLt] = useState<EstadoLt>({ fase: 'carregando' })
+  const [ia, setIa] = useState<EstadoIa>({ fase: 'parado' })
+  const [statusIa, setStatusIa] = useState<StatusIa | null>(null)
+  /** a IA olhou e não corrigiu (falso positivo do corretor): começa desmarcada */
+  const [iaManteve, setIaManteve] = useState<Set<string>>(() => new Set())
+  const parar = useRef(false)
+  const revisor = useMemo(() => (base ? textoParaRevisor(blocosNoIntervalo(base.doc, base.de, base.ate)) : null), [base])
   const [usarLt, setUsarLt] = useState(true)
   const [fora, setFora] = useState<Set<string>>(() => new Set())
   const [aplicando, setAplicando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!base) return
     let vivo = true
-    const { texto, mapa } = textoParaRevisor(blocosNoIntervalo(base.doc, base.de, base.ate))
+    call<StatusIa>('ia.status')
+      .then((r) => {
+        if (vivo) setStatusIa(r)
+      })
+      .catch(() => {})
+    return () => {
+      vivo = false
+      parar.current = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!base || !revisor) return
+    let vivo = true
+    const { texto, mapa } = revisor
     if (!texto.trim()) {
       setLt({ fase: 'indisponivel', aviso: 'Sem texto para conferir.' })
       return
@@ -87,7 +120,7 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
       .then((r) => {
         if (!vivo) return
         if (!r.ativo) setLt({ fase: 'indisponivel', aviso: r.aviso ?? 'LanguageTool indisponível.' })
-        else setLt({ fase: 'pronto', modo: r.modo, correcoes: correcoesDoRevisor(r.sugestoes, mapa, base.doc, base.de, base.ate) })
+        else setLt({ fase: 'pronto', modo: r.modo, sugestoes: r.sugestoes, correcoes: correcoesDoRevisor(r.sugestoes, mapa, base.doc, base.de, base.ate) })
       })
       .catch((e: unknown) => {
         if (vivo) setLt({ fase: 'indisponivel', aviso: `LanguageTool: ${msg(e)}` })
@@ -95,11 +128,52 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
     return () => {
       vivo = false
     }
-  }, [base, dir, file])
+  }, [base, revisor, dir, file])
+
+  /** Manda o trecho à IA, parte por parte, com o que o corretor e a contagem de repetições acharam. */
+  const corrigirComIa = async (): Promise<void> => {
+    if (!base || !revisor || !revisor.texto.trim()) return
+    parar.current = false
+    const achados: AchadoIa[] =
+      lt.fase === 'pronto'
+        ? lt.sugestoes
+            .filter((x) => x.categoria === 'ortografia' || x.categoria === 'gramatica')
+            .map((x) => ({ categoria: x.categoria as AchadoIa['categoria'], inicio: x.inicio, original: x.original, substituto: x.substituto, motivo: x.motivo }))
+        : []
+    const correcoes: Correcao[] = []
+    const avisos: string[] = []
+    let total = 1
+    let feitas = 0
+    setIa({ fase: 'rodando', parte: 0, total, achadas: 0 })
+    try {
+      for (let p = 0; p < total; p++) {
+        if (parar.current) break
+        const r = await call<ResultadoIaCorrigir>('corrigir.ia', dir, file, revisor.texto, achados, p)
+        total = r.total
+        feitas = p + 1
+        correcoes.push(...correcoesDoRevisor(r.sugestoes, revisor.mapa, base.doc, base.de, base.ate, true))
+        avisos.push(...r.avisos)
+        if (!parar.current) setIa({ fase: 'rodando', parte: feitas, total, achadas: correcoes.length })
+      }
+    } catch (e) {
+      setIa({ fase: 'erro', aviso: msg(e), correcoes })
+      return
+    }
+    if (editor.isDestroyed) return
+    // achados do corretor que a IA olhou e deixou como estavam: desmarcados (dá para marcar de volta)
+    if (lt.fase === 'pronto' && correcoes.length) {
+      const mantidos = lt.correcoes.filter((c) => !correcoes.some((x) => x.de < c.ate && c.de < x.ate))
+      const ids = new Set(mantidos.map((c) => c.id))
+      setIaManteve(ids)
+      setFora((s) => new Set([...s, ...ids]))
+    }
+    setIa({ fase: 'pronto', correcoes, avisos, parcial: feitas < total })
+  }
 
   const comLt = usarLt && lt.fase === 'pronto'
-  // tipografia primeiro: onde as duas mexem no mesmo trecho, vale a regra local
-  const lista = useMemo(() => semSobreposicao(locais, comLt && lt.fase === 'pronto' ? lt.correcoes : []), [locais, comLt, lt])
+  const corrIa = useMemo(() => (ia.fase === 'pronto' || ia.fase === 'erro' ? ia.correcoes : []), [ia])
+  // tipografia primeiro (regra local), depois a IA, depois o corretor: onde mexem no mesmo trecho, vale a primeira
+  const lista = useMemo(() => semSobreposicao(locais, corrIa, comLt && lt.fase === 'pronto' ? lt.correcoes : []), [locais, corrIa, comLt, lt])
   const escolhidas = lista.filter((c) => !fora.has(c.id))
   const porTipo = useMemo(() => {
     const m = new Map<TipoCorrecao, Correcao[]>()
@@ -147,7 +221,25 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
   }
 
   const n = escolhidas.length
-  const carregando = lt.fase === 'carregando'
+  const rodandoIa = ia.fase === 'rodando'
+  const carregando = lt.fase === 'carregando' || rodandoIa
+  const iaPronta = !!statusIa && statusIa.provedor !== 'off' && statusIa.configurado
+  const textoIa = (): string => {
+    if (!statusIa) return 'Conferindo a IA…'
+    if (!iaPronta) return 'IA desligada ou sem chave. Escolha um provedor em Ajustes › IA.'
+    if (ia.fase === 'rodando') {
+      return ia.total > 1
+        ? `Corrigindo parte ${Math.min(ia.parte + 1, ia.total)} de ${ia.total}… (${ia.achadas} ${ia.achadas === 1 ? 'troca' : 'trocas'} até agora)`
+        : 'A IA está corrigindo o trecho…'
+    }
+    if (ia.fase === 'pronto') {
+      const k = ia.correcoes.length
+      return `${k ? `${k} ${k === 1 ? 'troca' : 'trocas'} da IA na lista, com o motivo de cada uma.` : 'A IA não viu nada a mudar.'}${ia.parcial ? ' Parou antes do fim.' : ''}${iaManteve.size ? ` ${iaManteve.size} ${iaManteve.size === 1 ? 'apontamento do corretor ficou desmarcado' : 'apontamentos do corretor ficaram desmarcados'}: a IA achou que estavam certos.` : ''}`
+    }
+    if (ia.fase === 'erro') return ia.aviso
+    const onde = statusIa.externo ? `o trecho vai para ${statusIa.nomeProvedor}` : `${statusIa.nomeProvedor}, no seu computador`
+    return `Manda os erros do corretor e as repetições para a IA (${onde}). Ela corrige mexendo o mínimo, pode recusar falso positivo e sugere até 3 ajustes de estilo por parte. Você confere tudo antes de aplicar.`
+  }
 
   return (
     <Modal titulo={TITULO[escopo]} onClose={onFechar} largura={720}>
@@ -174,6 +266,30 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
               </small>
             </span>
           </label>
+
+          <div className={`ms-corr-lt ms-corr-ia ${iaPronta ? '' : 'off'}`} aria-busy={rodandoIa}>
+            <span>
+              <b>Corrigir com IA</b>
+              <small aria-live="polite">{textoIa()}</small>
+              {ia.fase === 'pronto' && ia.avisos.length > 0 && <small>{ia.avisos.join(' ')}</small>}
+            </span>
+            {rodandoIa ? (
+              <button type="button" className="btn sm" onClick={() => (parar.current = true)}>
+                Parar
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn sm"
+                disabled={!iaPronta || lt.fase === 'carregando' || aplicando || !revisor?.texto.trim()}
+                onClick={() => void corrigirComIa()}
+                title={lt.fase === 'carregando' ? 'Esperando o LanguageTool terminar' : undefined}
+              >
+                <Ico n="corrigir" size={14} />
+                {ia.fase === 'pronto' || ia.fase === 'erro' ? 'Corrigir de novo' : 'Corrigir com IA'}
+              </button>
+            )}
+          </div>
 
           {porTipo.length > 0 && (
             <div className="ms-corr-tipos" role="group" aria-label="Marcar ou desmarcar por tipo">
@@ -216,6 +332,8 @@ export function Corrigir({ editor, dir, file, escopo, antes, onFechar, onAplicad
                       <span className="ms-corr-h">
                         <span className={`ms-corr-dot t-${c.tipo}`} aria-hidden="true" />
                         <span className="ms-eb">{ROTULO_CORRECAO[c.tipo]}</span>
+                        {c.ia && <span className="ms-corr-ia-tag">IA</span>}
+                        {iaManteve.has(c.id) && <span className="ms-corr-why">a IA manteve o original</span>}
                         {c.motivo && <span className="ms-corr-why">{c.motivo}</span>}
                       </span>
                       {c.bloco ? (

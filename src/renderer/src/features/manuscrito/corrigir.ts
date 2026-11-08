@@ -31,6 +31,8 @@ export type TipoCorrecao =
   | 'vazios'
   | 'ortografia'
   | 'gramatica'
+  | 'repeticao'
+  | 'estilo'
 
 export const ROTULO_CORRECAO: Record<TipoCorrecao, string> = {
   reticencias: 'Reticências',
@@ -41,7 +43,9 @@ export const ROTULO_CORRECAO: Record<TipoCorrecao, string> = {
   pontuacao: 'Espaço antes da pontuação',
   vazios: 'Parágrafos vazios',
   ortografia: 'Ortografia',
-  gramatica: 'Gramática'
+  gramatica: 'Gramática',
+  repeticao: 'Repetição',
+  estilo: 'Estilo'
 }
 
 export type EscopoCorrecao = 'selecao' | 'paragrafo' | 'capitulo'
@@ -59,8 +63,15 @@ export interface Correcao {
   depois: string
   /** remove nós inteiros (parágrafos vazios) em vez de trocar texto */
   bloco?: boolean
-  /** explicação (LanguageTool) */
+  /** explicação (LanguageTool, IA) */
   motivo?: string
+  /** veio da IA */
+  ia?: boolean
+  /**
+   * Trocas mínimas dentro de [de, ate) (posições no documento): a reescrita da
+   * IA só mexe no que mudou, e o resto do trecho guarda itálico e negrito.
+   */
+  partes?: Edicao[]
 }
 
 // ------------------------------------------------------------- texto puro
@@ -396,14 +407,17 @@ export function textoParaRevisor(blocos: Bloco[]): { texto: string; mapa: number
 }
 
 /**
- * Sugestões do LanguageTool (posições no texto enviado) → correções no
- * documento. Só ficam as que caem num trecho contínuo do documento (sem nota
- * no meio), dentro de [de, ate], e cujo texto ainda é o original.
+ * Sugestões do LanguageTool ou da IA (posições no texto enviado) → correções
+ * no documento. Só ficam as que caem num trecho contínuo do documento (sem
+ * nota no meio), dentro de [de, ate], e cujo texto ainda é o original.
+ * As da IA saem divididas em trocas mínimas (`partes`).
  */
-export function correcoesDoRevisor(sugs: SugestaoCorrigir[], mapa: number[], doc: PMNode, de: number, ate: number): Correcao[] {
+export function correcoesDoRevisor(sugs: SugestaoCorrigir[], mapa: number[], doc: PMNode, de: number, ate: number, ia = false): Correcao[] {
   const out: Correcao[] = []
   for (const s of sugs) {
-    if (s.categoria !== 'ortografia' && s.categoria !== 'gramatica') continue
+    const tipo: TipoCorrecao | null =
+      s.categoria === 'ortografia' || s.categoria === 'gramatica' ? s.categoria : ia && (s.categoria === 'repeticao' || s.categoria === 'estilo') ? s.categoria : null
+    if (!tipo) continue
     const len = s.original.length
     if (!len || s.inicio < 0 || s.inicio + len > mapa.length) continue
     const d0 = mapa[s.inicio]!
@@ -413,14 +427,29 @@ export function correcoesDoRevisor(sugs: SugestaoCorrigir[], mapa: number[], doc
     const d1 = d0 + len
     if (d0 < de || d1 > ate) continue
     if (doc.textBetween(d0, d1, '\n', OBJ) !== s.original) continue
-    out.push({ id: `${s.categoria}-${d0}-${d1}`, tipo: s.categoria, de: d0, ate: d1, original: s.original, por: s.substituto, antes: s.antes, depois: s.depois, motivo: s.motivo })
+    const c: Correcao = { id: `${ia ? 'ia-' : ''}${tipo}-${d0}-${d1}`, tipo, de: d0, ate: d1, original: s.original, por: s.substituto, antes: s.antes, depois: s.depois, motivo: s.motivo }
+    if (ia) {
+      c.ia = true
+      const es = edicoes(s.original, s.substituto, 600)
+      if (es && es.length) c.partes = es.map((e) => ({ de: d0 + e.de, ate: d0 + e.ate, por: e.por }))
+    }
+    out.push(c)
   }
   return out
 }
 
-function cruzam(a: Correcao, b: Correcao): boolean {
+function trechos(c: Correcao): Edicao[] {
+  return c.partes ?? [{ de: c.de, ate: c.ate, por: c.por }]
+}
+
+function cruzamTrecho(a: Edicao, b: Edicao): boolean {
   if (a.de === a.ate || b.de === b.ate) return a.de === b.de || (a.de > b.de && a.de < b.ate) || (b.de > a.de && b.de < a.ate)
   return a.de < b.ate && b.de < a.ate
+}
+
+/** Duas correções mexem no mesmo lugar (as da IA contam só o que de fato muda). */
+function cruzam(a: Correcao, b: Correcao): boolean {
+  return trechos(a).some((x) => trechos(b).some((y) => cruzamTrecho(x, y)))
 }
 
 /**
@@ -439,9 +468,10 @@ export function semSobreposicao(...listas: Correcao[][]): Correcao[] {
  * herda as marcas do trecho que substitui.
  */
 export function aplicarCorrecoes(tr: Transaction, lista: Correcao[]): Transaction {
-  const ord = [...lista].sort((a, b) => b.de - a.de || b.ate - a.ate)
+  const ops = lista.flatMap((c) => (c.bloco ? [{ de: c.de, ate: c.ate, por: '' }] : trechos(c)))
+  const ord = ops.sort((a, b) => b.de - a.de || b.ate - a.ate)
   for (const c of ord) {
-    if (c.bloco || !c.por) {
+    if (!c.por) {
       if (c.ate > c.de) tr.delete(c.de, c.ate)
       continue
     }

@@ -39,3 +39,31 @@ export function posicaoDaSugestao(texto: string, s: Pick<Sugestao, 'id' | 'origi
   if (i < 0 || texto.indexOf(alvo, i + 1) >= 0) return -1
   return i + s.antes.length
 }
+
+/**
+ * 'corrigir.ia'(dir, chapterFile, texto, achados, parte) → ResultadoIaCorrigir
+ *   A IA corrige o trecho `parte` (0-based) do texto simples, sabendo o que o
+ *   LanguageTool (`achados`, posições no texto) e a contagem de repetições
+ *   (feita no main) acharam. Pode recusar falso positivo e propor poucas
+ *   melhorias claras de estilo. Cada troca volta com `inicio` no texto inteiro;
+ *   a interface mostra tudo na prévia antes de aplicar.
+ */
+export interface AchadoIa {
+  categoria: 'ortografia' | 'gramatica'
+  inicio: number
+  original: string
+  substituto: string
+  motivo: string
+}
+
+export interface ResultadoIaCorrigir {
+  sugestoes: SugestaoCorrigir[]
+  /** quantas partes o texto tem (a interface pede uma de cada vez) */
+  total: number
+  /** problemas apontados nesta parte (corretor + repetições), para o progresso */
+  apontados: number
+  avisos: string[]
+}
+
+/** tamanho de cada parte enviada à IA (caracteres) */
+export const PARTE_IA = 4500
