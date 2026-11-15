@@ -53,4 +53,13 @@ describe('metas por capítulo com remanejamento', () => {
   it('soma das metas planejadas', () => {
     expect(somaPlanejada([cap('a', 0), cap('p', 0, 'parte'), cap('b', 0)], 3000, { b: { meta: 10000 } })).toBe(13000)
   })
+
+  it('editar de novo um capítulo pronto reajusta os seguintes; reabrir devolve a meta original', () => {
+    const porCap = { a: { meta: 10000, pronto: true } }
+    const com = (palavras: number, mc: Record<string, { meta?: number; pronto?: boolean }>) =>
+      metasEfetivas([cap('a', palavras), cap('b', 0)], 3000, mc).get('b')!.efetiva
+    expect(com(7000, porCap)).toBe(6000) // faltaram 3 mil: vão todos para b
+    expect(com(8500, porCap)).toBe(4500) // escreveu mais: o saldo encolhe sozinho
+    expect(com(7000, { a: { meta: 10000 } })).toBe(3000) // reaberto: volta ao planejado
+  })
 })
