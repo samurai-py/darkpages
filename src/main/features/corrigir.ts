@@ -6,6 +6,7 @@ import { dicionarioDoLivro, listarDecisoes } from '../ai/decisoes'
 import { filtrarSugestoes as filtrar, trechoMantido } from '../../shared/decisoes'
 import {
   PARTE_IA,
+  PARTE_IA_GROQ,
   posicaoDaSugestao,
   type AchadoIa,
   type ResultadoIaCorrigir,
@@ -35,10 +36,10 @@ function capFile(v: unknown): string {
 }
 
 /** Partes do texto com o deslocamento de cada uma (mesma divisão em toda chamada). */
-export function partesDoTexto(t: string): Array<{ ini: number; texto: string }> {
+export function partesDoTexto(t: string, tamanho = PARTE_IA): Array<{ ini: number; texto: string }> {
   const out: Array<{ ini: number; texto: string }> = []
   let base = 0
-  for (const p of pedacos(t, PARTE_IA)) {
+  for (const p of pedacos(t, tamanho)) {
     const i = t.indexOf(p, base)
     const ini = i >= 0 ? i : base
     out.push({ ini, texto: p })
@@ -141,14 +142,16 @@ export const handlers: Handlers = {
     const t = str(texto, MAX_TEXTO)
     const ia = await aiSettings(ctx)
     if (ia.provider === 'off') throw new Error('A IA está desligada. Escolha um provedor em Ajustes › IA.')
-    const partes = partesDoTexto(t)
+    // Groq gratuito: ~8 mil tokens por minuto por pedido, então partes menores
+    const tam = ia.provider === 'groq' ? PARTE_IA_GROQ : PARTE_IA
+    const partes = partesDoTexto(t, tam)
     const total = partes.length
     const n = typeof parteRaw === 'number' && Number.isInteger(parteRaw) ? parteRaw : 0
     const parte = partes[n]
     if (!parte) return { sugestoes: [], total, apontados: 0, avisos: [] }
     const fim = parte.ini + parte.texto.length
 
-    const c = await contextoIa(ctx, d, f, 'estilo', { textoReferencia: t, reservaCaracteres: PARTE_IA + 3000, maxTokens: 2000 })
+    const c = await contextoIa(ctx, d, f, 'estilo', { textoReferencia: t, reservaCaracteres: tam + 3000, maxTokens: 2000 })
     const achados = achadosValidos(achadosRaw, t).filter((a) => a.inicio >= parte.ini && a.inicio + a.original.length <= fim)
     const reps = filtrar(repeticoesRevisor(parte.texto), c.decisoes, c.ignorados, c.capId)
     const problemas = listaDeProblemas(achados, reps)

@@ -218,6 +218,8 @@ interface Resposta {
   status: number
   json: unknown
   texto: string
+  /** espera pedida pelo servidor (cabeçalho retry-after), em ms */
+  esperaMs?: number
 }
 
 async function postar(
@@ -251,7 +253,22 @@ async function postar(
   } catch {
     /* corpo não-JSON (proxy, HTML de erro) */
   }
-  return { status: res.status, json, texto }
+  const ra = Number(res.headers.get('retry-after'))
+  return { status: res.status, json, texto, ...(Number.isFinite(ra) && ra > 0 ? { esperaMs: Math.round(ra * 1000) } : {}) }
+}
+
+const dormir = (ms: number): Promise<void> => new Promise((ok) => setTimeout(ok, ms))
+
+/**
+ * Groq (plano gratuito: ~8 mil tokens por minuto): num 429 espera o tempo que o
+ * servidor pede e tenta de novo, no máximo 3 vezes e até 70 s cada.
+ */
+async function postarComEspera(servico: string, url: string, headers: Record<string, string>, body: unknown, timeoutMs: number, tentativas = 3): Promise<Resposta> {
+  for (let i = 1; ; i++) {
+    const r = await postar(servico, url, headers, body, timeoutMs)
+    if (r.status !== 429 || i >= tentativas) return r
+    await dormir(Math.min(70_000, Math.max(3_000, r.esperaMs ?? 20_000)))
+  }
 }
 
 function mensagemApi(r: Resposta): string {
@@ -430,14 +447,17 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
       const chave = g ? s.groqKey : s.openaiKey
       if (!chave) throw new Error(`Chave ${g ? 'do Groq' : 'da OpenAI'} não configurada. Cole a chave em Ajustes → IA.`)
       const model = checaModelo(g ? s.groqModel : s.openaiModel, nome)
-      const r = await postar(
+      const r = await (g ? postarComEspera : postar)(
         g ? 'O Groq' : 'A OpenAI',
         g ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions',
         { authorization: `Bearer ${chave}` },
         {
           model,
-          // inclui tokens de raciocínio nos modelos que raciocinam
-          max_completion_tokens: Math.min(16000, Math.max(4000, maxTokens * 4)),
+          // inclui tokens de raciocínio nos modelos que raciocinam. No Groq o limite por minuto é
+          // pequeno (8 mil no plano gratuito) e o pedido já conta o que reserva para a resposta: teto baixo
+          max_completion_tokens: g ? Math.min(3000, Math.max(1200, Math.round(maxTokens * 1.5))) : Math.min(16000, Math.max(4000, maxTokens * 4)),
+          // modelos gpt-oss aceitam esforço de raciocínio: "low" gasta menos tokens
+          ...(g && /^openai\/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
           ...(req.json ? { response_format: { type: 'json_object' } } : {}),
           messages: [...(system ? [{ role: 'system', content: system }] : []), ...req.messages]
         },

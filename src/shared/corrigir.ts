@@ -67,3 +67,5 @@ export interface ResultadoIaCorrigir {
 
 /** tamanho de cada parte enviada à IA (caracteres) */
 export const PARTE_IA = 4500
+/** com o Groq gratuito (limite pequeno de tokens por minuto) */
+export const PARTE_IA_GROQ = 2200
