@@ -45,8 +45,8 @@ export interface AiRequest {
 
 import { chatViaCli, conversaComoTexto } from './cli'
 
-export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'claude-cli' | 'codex-cli'
-export const PROVEDORES: Provedor[] = ['off', 'ollama', 'claude-cli', 'codex-cli', 'anthropic', 'openai', 'gemini']
+export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'groq' | 'claude-cli' | 'codex-cli'
+export const PROVEDORES: Provedor[] = ['off', 'ollama', 'claude-cli', 'codex-cli', 'anthropic', 'openai', 'gemini', 'groq']
 
 export interface AiSettings {
   provider: Provedor
@@ -58,6 +58,8 @@ export interface AiSettings {
   openaiModel: string
   geminiKey: string
   geminiModel: string
+  groqKey: string
+  groqModel: string
   /** modelo do Claude Code ('' = padrão do programa; aceita apelido como haiku/sonnet/opus ou nome completo) */
   claudeCliModel: string
   /** modelo do Codex ('' = padrão do programa) */
@@ -78,6 +80,8 @@ export const AI_DEFAULTS: AiSettings = {
   openaiModel: 'gpt-5.4-mini-2026-03-17',
   geminiKey: '',
   geminiModel: 'gemini-3.8-flash',
+  groqKey: '',
+  groqModel: 'openai/gpt-oss-120b',
   claudeCliModel: '',
   codexCliModel: '',
   claudeCliModelAuto: 'haiku',
@@ -127,6 +131,8 @@ export function modeloAtivo(s: AiSettings): string {
       return s.openaiModel
     case 'gemini':
       return s.geminiModel
+    case 'groq':
+      return s.groqModel
     case 'claude-cli':
       return s.claudeCliModel || 'padrão do Claude Code'
     case 'codex-cli':
@@ -145,7 +151,7 @@ export function modeloAutomatico(s: AiSettings): string {
 
 /** true quando o texto do livro sai desta máquina/rede ao usar o provedor. */
 export function provedorExterno(p: Provedor): boolean {
-  return p === 'anthropic' || p === 'openai' || p === 'gemini' || p === 'claude-cli' || p === 'codex-cli'
+  return p === 'anthropic' || p === 'openai' || p === 'gemini' || p === 'groq' || p === 'claude-cli' || p === 'codex-cli'
 }
 
 export const NOME_PROVEDOR: Record<Provedor, string> = {
@@ -154,6 +160,7 @@ export const NOME_PROVEDOR: Record<Provedor, string> = {
   anthropic: 'Claude (Anthropic)',
   openai: 'ChatGPT (OpenAI)',
   gemini: 'Gemini (Google)',
+  groq: 'Groq',
   'claude-cli': 'Claude (sua assinatura, via Claude Code)',
   'codex-cli': 'ChatGPT (sua assinatura, via Codex)'
 }
@@ -180,7 +187,8 @@ export async function salvarAiSettings(ctx: Ctx, patch: Record<string, unknown>)
     ['ollamaModel', 'Ollama'],
     ['anthropicModel', 'Claude'],
     ['openaiModel', 'OpenAI'],
-    ['geminiModel', 'Gemini']
+    ['geminiModel', 'Gemini'],
+    ['groqModel', 'Groq']
   ] as const) {
     if (k in patch) out[k] = patch[k] === '' && k === 'ollamaModel' ? '' : checaModelo(patch[k], rot)
   }
@@ -192,7 +200,7 @@ export async function salvarAiSettings(ctx: Ctx, patch: Record<string, unknown>)
   ] as const) {
     if (k in patch) out[k] = typeof patch[k] === 'string' && patch[k].trim() === '' ? '' : checaModelo(typeof patch[k] === 'string' ? patch[k].trim() : patch[k], rot)
   }
-  for (const k of ['anthropicKey', 'openaiKey', 'geminiKey'] as const) {
+  for (const k of ['anthropicKey', 'openaiKey', 'geminiKey', 'groqKey'] as const) {
     if (k in patch) {
       const v = patch[k]
       if (typeof v !== 'string' || v.length > 400 || /\s/.test(v.trim()) || /[\r\n]/.test(v)) throw new Error('Chave de API inválida.')
@@ -414,13 +422,18 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
       return text
     }
 
-    case 'openai': {
-      if (!s.openaiKey) throw new Error('Chave da OpenAI não configurada. Cole a chave em Ajustes → IA.')
-      const model = checaModelo(s.openaiModel, 'OpenAI')
+    case 'openai':
+    case 'groq': {
+      // Groq usa o mesmo formato de chat da OpenAI, em outro endereço
+      const g = s.provider === 'groq'
+      const nome = g ? 'Groq' : 'OpenAI'
+      const chave = g ? s.groqKey : s.openaiKey
+      if (!chave) throw new Error(`Chave ${g ? 'do Groq' : 'da OpenAI'} não configurada. Cole a chave em Ajustes → IA.`)
+      const model = checaModelo(g ? s.groqModel : s.openaiModel, nome)
       const r = await postar(
-        'A OpenAI',
-        'https://api.openai.com/v1/chat/completions',
-        { authorization: `Bearer ${s.openaiKey}` },
+        g ? 'O Groq' : 'A OpenAI',
+        g ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions',
+        { authorization: `Bearer ${chave}` },
         {
           model,
           // inclui tokens de raciocínio nos modelos que raciocinam
@@ -430,14 +443,14 @@ export async function aiChatCom(s: AiSettings, req: AiRequest): Promise<string> 
         },
         req.timeoutMs ?? 180_000
       )
-      if (r.status >= 400) throw erroNuvem('OpenAI', r, model)
+      if (r.status >= 400) throw erroNuvem(nome, r, model)
       const j = r.json as { choices?: Array<{ message?: { content?: string | null; refusal?: string | null }; finish_reason?: string }> } | null
       const c = j?.choices?.[0]
-      if (c?.message?.refusal) throw new Error(`A OpenAI recusou o pedido: ${c.message.refusal}`)
+      if (c?.message?.refusal) throw new Error(`${nome} recusou o pedido: ${c.message.refusal}`)
       const text = c?.message?.content ?? ''
       if (!text.trim()) {
-        if (c?.finish_reason === 'length') throw new Error('A resposta da OpenAI foi cortada pelo limite de tamanho.')
-        throw new Error('A OpenAI devolveu uma resposta vazia.')
+        if (c?.finish_reason === 'length') throw new Error(`A resposta de ${nome} foi cortada pelo limite de tamanho.`)
+        throw new Error(`${nome} devolveu uma resposta vazia.`)
       }
       return text
     }

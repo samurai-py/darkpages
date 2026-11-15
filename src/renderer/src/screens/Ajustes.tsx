@@ -25,20 +25,25 @@ const PROVEDORES: Array<{ id: Provedor; nome: string; desc: string; externo: boo
   { id: 'codex-cli', nome: 'ChatGPT · assinatura', desc: 'Usa seu ChatGPT Plus/Pro pelo Codex logado neste computador. Sem chave.', externo: true },
   { id: 'anthropic', nome: 'Claude', desc: 'Anthropic, com sua chave.', externo: true },
   { id: 'openai', nome: 'ChatGPT', desc: 'OpenAI, com sua chave.', externo: true },
-  { id: 'gemini', nome: 'Gemini', desc: 'Google, com sua chave.', externo: true }
+  { id: 'gemini', nome: 'Gemini', desc: 'Google, com sua chave.', externo: true },
+  { id: 'groq', nome: 'Groq', desc: 'Modelos abertos muito rápidos, com sua chave.', externo: true }
 ]
 
 /** Modelos sugeridos (conferidos na documentação de cada provedor); o campo aceita qualquer outro. */
-const MODELOS: Record<'anthropic' | 'openai' | 'gemini', string[]> = {
+const MODELOS: Record<Nuvem, string[]> = {
   anthropic: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
   openai: ['gpt-5.4-mini-2026-03-17', 'gpt-5.4-nano-2026-03-17', 'gpt-5.5-2026-04-23'],
-  gemini: ['gemini-3.8-flash', 'gemini-2.5-flash-lite']
+  gemini: ['gemini-3.8-flash', 'gemini-2.5-flash-lite'],
+  groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']
 }
 
-const CHAVE: Record<'anthropic' | 'openai' | 'gemini', { campo: 'anthropicKey' | 'openaiKey' | 'geminiKey'; modelo: 'anthropicModel' | 'openaiModel' | 'geminiModel'; onde: string }> = {
+type Nuvem = 'anthropic' | 'openai' | 'gemini' | 'groq'
+
+const CHAVE: Record<Nuvem, { campo: 'anthropicKey' | 'openaiKey' | 'geminiKey' | 'groqKey'; modelo: 'anthropicModel' | 'openaiModel' | 'geminiModel' | 'groqModel'; onde: string }> = {
   anthropic: { campo: 'anthropicKey', modelo: 'anthropicModel', onde: 'console.anthropic.com' },
   openai: { campo: 'openaiKey', modelo: 'openaiModel', onde: 'platform.openai.com' },
-  gemini: { campo: 'geminiKey', modelo: 'geminiModel', onde: 'aistudio.google.com' }
+  gemini: { campo: 'geminiKey', modelo: 'geminiModel', onde: 'aistudio.google.com' },
+  groq: { campo: 'groqKey', modelo: 'groqModel', onde: 'console.groq.com' }
 }
 
 const IA_PADRAO: Required<IaSettings> = {
@@ -51,6 +56,8 @@ const IA_PADRAO: Required<IaSettings> = {
   openaiModel: 'gpt-5.4-mini-2026-03-17',
   geminiKey: '',
   geminiModel: 'gemini-3.8-flash',
+  groqKey: '',
+  groqModel: 'openai/gpt-oss-120b',
   claudeCliModel: '',
   codexCliModel: '',
   claudeCliModelAuto: 'haiku',
@@ -87,7 +94,7 @@ function Aviso({ f }: { f: Feedback }): ReactElement {
 function SecaoIa(): ReactElement {
   const [salvo, setSalvo] = useState<Required<IaSettings>>(IA_PADRAO)
   const [form, setForm] = useState<Required<IaSettings>>(IA_PADRAO)
-  const [chaves, setChaves] = useState({ anthropicKey: '', openaiKey: '', geminiKey: '' })
+  const [chaves, setChaves] = useState({ anthropicKey: '', openaiKey: '', geminiKey: '', groqKey: '' })
   const [verChave, setVerChave] = useState(false)
   const [modelos, setModelos] = useState<ModeloOllama[] | null>(null)
   const [modelosErr, setModelosErr] = useState('')
@@ -152,7 +159,7 @@ function SecaoIa(): ReactElement {
       const v = { ...IA_PADRAO, ...r }
       setSalvo(v)
       setForm(v)
-      setChaves({ anthropicKey: '', openaiKey: '', geminiKey: '' })
+      setChaves({ anthropicKey: '', openaiKey: '', geminiKey: '', groqKey: '' })
       setFb({ tipo: 'ok', msg: `Salvo às ${hora()}.` })
       return true
     } catch (e) {
@@ -184,7 +191,7 @@ function SecaoIa(): ReactElement {
     void salvar()
   }
 
-  const nuvem = form.provider === 'anthropic' || form.provider === 'openai' || form.provider === 'gemini' ? form.provider : null
+  const nuvem = form.provider === 'anthropic' || form.provider === 'openai' || form.provider === 'gemini' || form.provider === 'groq' ? form.provider : null
   const instalado = (m: string): boolean => !!modelos?.some((x) => x.nome === m || x.nome === `${m}:latest`)
   const mudou = JSON.stringify(form) !== JSON.stringify(salvo) || Object.values(chaves).some(Boolean)
 

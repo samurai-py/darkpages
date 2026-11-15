@@ -223,7 +223,7 @@ export { redigir }
 /** IA ligada e com chave (o mesmo critério de `ia.status`.configurado). */
 async function iaConfigurada(ctx: Ctx): Promise<boolean> {
   const s = await aiSettings(ctx)
-  const chave = s.provider === 'anthropic' ? s.anthropicKey : s.provider === 'openai' ? s.openaiKey : s.provider === 'gemini' ? s.geminiKey : 'x'
+  const chave = s.provider === 'anthropic' ? s.anthropicKey : s.provider === 'openai' ? s.openaiKey : s.provider === 'gemini' ? s.geminiKey : s.provider === 'groq' ? s.groqKey : 'x'
   return s.provider !== 'off' && !!chave
 }
 
@@ -701,7 +701,7 @@ async function status(ctx: Ctx): Promise<unknown> {
   } catch {
     ltUrl = rs.ltUrl
   }
-  const chave = s.provider === 'anthropic' ? s.anthropicKey : s.provider === 'openai' ? s.openaiKey : s.provider === 'gemini' ? s.geminiKey : 'x'
+  const chave = s.provider === 'anthropic' ? s.anthropicKey : s.provider === 'openai' ? s.openaiKey : s.provider === 'gemini' ? s.geminiKey : s.provider === 'groq' ? s.groqKey : 'x'
   return {
     provedor: s.provider,
     nomeProvedor: NOME_PROVEDOR[s.provider],

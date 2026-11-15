@@ -14,7 +14,7 @@ import type {
 
 /** Chamadas tipadas da feature IA (métodos "ia.*" do processo principal). */
 
-export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'claude-cli' | 'codex-cli'
+export type Provedor = 'off' | 'ollama' | 'anthropic' | 'openai' | 'gemini' | 'groq' | 'claude-cli' | 'codex-cli'
 export type LtModo = 'off' | 'local' | 'publico'
 
 export interface SugestaoModelo {
@@ -74,6 +74,8 @@ export interface IaSettings {
   openaiModel?: string
   geminiKey?: string
   geminiModel?: string
+  groqKey?: string
+  groqModel?: string
   /** '' = padrão do programa */
   claudeCliModel?: string
   codexCliModel?: string
