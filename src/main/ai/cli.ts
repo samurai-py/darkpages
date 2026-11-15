@@ -35,12 +35,29 @@ const LOGIN: Record<CliKind, string> = {
   codex: 'rode `codex login` neste computador e entre com sua conta ChatGPT'
 }
 
-async function findBin(kind: CliKind): Promise<string> {
+/**
+ * Onde procurar o programa. No Windows só valem executáveis (.exe): rodar um
+ * .cmd exigiria o cmd.exe, e o texto do livro iria junto na linha de comando
+ * (um "&" ou "|" nele viraria outro comando). Quem instalou por npm e só tem
+ * o .cmd aponta o .exe real em FOLIO_CLAUDE_BIN / FOLIO_CODEX_BIN.
+ */
+function candidatos(kind: CliKind): string[] {
   const env = process.env[kind === 'claude' ? 'FOLIO_CLAUDE_BIN' : 'FOLIO_CODEX_BIN']
-  const cands = [env, join(homedir(), '.local', 'bin', kind), `/usr/local/bin/${kind}`, `/usr/bin/${kind}`].filter(
-    (c): c is string => Boolean(c)
-  )
-  for (const c of cands) {
+  const lista: Array<string | undefined> = [env]
+  if (process.platform === 'win32') {
+    const nome = `${kind}.exe`
+    const local = process.env['LOCALAPPDATA']
+    lista.push(join(homedir(), '.local', 'bin', nome), join(homedir(), '.claude', 'local', nome))
+    if (local) lista.push(join(local, 'Programs', kind, nome), join(local, 'Microsoft', 'WinGet', 'Links', nome))
+  } else {
+    lista.push(join(homedir(), '.local', 'bin', kind), `/usr/local/bin/${kind}`, `/usr/bin/${kind}`, `/opt/homebrew/bin/${kind}`)
+  }
+  return lista.filter((c): c is string => Boolean(c))
+}
+
+async function findBin(kind: CliKind): Promise<string> {
+  for (const c of candidatos(kind)) {
+    if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(c)) continue
     try {
       await access(c, constants.X_OK)
       return c
@@ -48,7 +65,11 @@ async function findBin(kind: CliKind): Promise<string> {
       /* próximo */
     }
   }
-  throw new Error(`${NOME[kind]} não está instalado neste computador. Instale e ${LOGIN[kind]}.`)
+  const dica =
+    process.platform === 'win32'
+      ? ` No Windows o app só usa o programa em formato .exe; se o seu foi instalado por npm (arquivo .cmd), defina a variável FOLIO_${kind.toUpperCase()}_BIN com o caminho do .exe.`
+      : ''
+  throw new Error(`${NOME[kind]} não está instalado neste computador. Instale e ${LOGIN[kind]}.${dica}`)
 }
 
 function run(bin: string, args: string[], input: string, cwd: string, timeoutMs: number): Promise<{ code: number; stdout: string; stderr: string }> {
