@@ -22,7 +22,7 @@ import { dataCurta, fichasNoTexto, fmt, formatoCm, paginasCapitulo, tempoLeitura
 import type { Furo } from '../features/manuscrito/extensions'
 import { NomeCapitulos } from '../features/manuscrito/NomeCapitulos'
 import { Versoes } from '../features/versoes/Versoes'
-import { Corrigir } from '../features/manuscrito/Corrigir'
+import { Corrigir } from '../features/manuscrito/CorrigirPrevia'
 import type { EscopoCorrecao } from '../features/manuscrito/corrigir'
 import { EVENTO_CORRIGIR } from '../features/manuscrito/escrita'
 import { resolveNumeracao } from '../../../shared/rotulo'
