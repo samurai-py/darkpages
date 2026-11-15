@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { recentsStore } from './recents'
 import { dispatch } from './api/registry'
 import { tratarAtualizacao, verificarAoAbrir } from './atualizar'
+import { migrarDadosAntigos } from './migrar-dados'
 import type { Ctx } from './api/context'
 import type { Project } from '../shared/types'
 
@@ -62,7 +63,9 @@ function createWindow(): void {
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  // traz settings.json e recentes.json de uma pasta de configurações antiga (nomes anteriores do app)
+  await migrarDadosAntigos(app.getPath('userData'), [join(app.getPath('appData'), 'folio'), join(app.getPath('appData'), 'Folio')]).catch(() => [])
   const ctx = makeCtx()
   ipcMain.handle('invoke', (_e, method: unknown, args: unknown) => {
     if (typeof method !== 'string' || !Array.isArray(args)) throw new Error('Chamada inválida')

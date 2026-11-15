@@ -265,3 +265,13 @@ describe('exportar e importar de novo', () => {
     expect(r.erros).toHaveLength(2)
   })
 })
+
+describe('project.yaml colado no importador', () => {
+  it('explica que é o arquivo do livro e como abrir a pasta, em vez de reclamar de livro/titulo', () => {
+    const { previa } = planejarTexto(estadoVazio('X', 'Y'), 'title: Meu Livro\nauthor: Eu\n')
+    expect(previa.erros).toHaveLength(1)
+    expect(previa.erros[0]!.texto).toMatch(/project\.yaml/)
+    expect(previa.erros[0]!.texto).toMatch(/Abrir livro existente/)
+  })
+})
+

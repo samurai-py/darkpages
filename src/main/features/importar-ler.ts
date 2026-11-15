@@ -465,6 +465,21 @@ export function lerArquivo(texto: string): Leitura {
   if (raiz === null || raiz === undefined) return { dados: null, avisos: [], erros: [{ texto: 'O arquivo está vazio.' }] }
   if (!ehObj(raiz)) return { dados: null, avisos: [], erros: [{ linha: 1, texto: 'O arquivo deve começar com chaves como “formato: folio-livro”, “livro:”, “fichas:”.' }] }
 
+  // o arquivo do próprio livro (project.yaml) tem "title:" e "author:" e não é um arquivo de importação
+  if (raiz['formato'] === undefined && raiz['livro'] === undefined && (raiz['title'] !== undefined || raiz['author'] !== undefined)) {
+    return {
+      dados: null,
+      avisos: [],
+      erros: [
+        {
+          linha: 1,
+          texto:
+            'Este é o project.yaml, o arquivo do próprio livro, e não um arquivo de importação. Para abrir o livro, volte à Biblioteca e use “Abrir livro existente”, escolhendo a PASTA do livro (a que contém project.yaml e manuscrito/).'
+        }
+      ]
+    }
+  }
+
   const topo = new Mapa(ctx, [], raiz, 'arquivo')
   topo.chaves(SECOES)
   if (raiz.formato === undefined) ctx.avisos.push({ linha: 1, texto: `Sem “formato: ${FORMATO_LIVRO}” no início; lido como ${FORMATO_LIVRO} versão ${VERSAO_LIVRO}.` })
