@@ -580,7 +580,7 @@ function SecaoRevisor(): ReactElement {
           </div>
           <div className="aj-ram panel">
             <span className="aj-eb">Como subir o servidor</span>
-            <p>Com Java instalado, o script do Folio baixa o LanguageTool oficial (uma vez, em ~/.local/share/folio) e sobe o servidor em 127.0.0.1:8081:</p>
+            <p>Com Java instalado, o script do Darkpages baixa o LanguageTool oficial (uma vez, em ~/.local/share/folio) e sobe o servidor em 127.0.0.1:8081:</p>
             <code className="aj-code">scripts/languagetool-local.sh</code>
             <p className="aj-hint">
               <code>scripts/languagetool-local.sh --systemd</code> mostra um serviço systemd de usuário para subir junto com o computador. Com Docker:{' '}

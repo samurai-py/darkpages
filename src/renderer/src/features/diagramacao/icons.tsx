@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 
-/** Ícones próprios da diagramação (traço 1.35, mesmo desenho do conjunto do Folio). */
+/** Ícones próprios da diagramação (traço 1.35, mesmo desenho do conjunto do Darkpages). */
 export type DgIcon = 'anterior' | 'proxima' | 'checar' | 'pdf' | 'epub' | 'capa' | 'guias' | 'atualizar' | 'ok' | 'aviso' | 'erro' | 'abrir'
 
 const P: Record<DgIcon, ReactElement> = {

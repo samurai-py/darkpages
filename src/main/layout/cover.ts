@@ -211,7 +211,7 @@ export function buildCoverTypst(input: CoverInput): { source: string; geo: Cover
     align(center, line(length: 20%, stroke: 0.5pt + ${destaque}))
   }))`
 
-  const source = `// Capa gerada pelo Folio. Não edite.
+  const source = `// Capa gerada pelo Darkpages. Não edite.
 #set document(title: ${str(`${title} — capa`)}, author: ${str(author || 'Autor')})
 #set page(width: ${mm(g.pageWmm)}, height: ${mm(g.pageHmm)}, margin: 0pt, fill: white)
 #set text(font: (${str(l.font)}, "Libertinus Serif"), lang: "pt", region: "br")

@@ -29,7 +29,7 @@
  *   AND ANY EXPRESS OR IMPLIED WARRANTIES ARE DISCLAIMED (texto completo no
  *   arquivo COPYING do projeto Snowball).
  *
- * `radical` é a chave que o Folio usa para agrupar repetições: Snowball +
+ * `radical` é a chave que o Darkpages usa para agrupar repetições: Snowball +
  * dois ajustes documentados abaixo (plural -ões/-ães do RSLP, de Orengo &
  * Huyck 2001, e comparação sem acento).
  */
@@ -190,7 +190,7 @@ export function semAcentoMin(s: string): string {
 }
 
 /**
- * Chave de agrupamento do Folio: radical Snowball, sem acento, com o plural
+ * Chave de agrupamento do Darkpages: radical Snowball, sem acento, com o plural
  * -ões/-ães reduzido a -ão antes (regra da etapa de plural do RSLP, Orengo &
  * Huyck 2001) — o Snowball sozinho separa "coração" (coraçã) de "corações"
  * (coraçõ). Hífen e apóstrofo são ignorados.

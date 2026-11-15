@@ -49,7 +49,7 @@ export function EbookTab({ project, l, flush }: Props): ReactElement {
     <section className="dg-work" aria-live="polite" aria-busy={busy}>
       <div className="panel dg-card">
         <h2 className="disp">E-book (EPUB 3)</h2>
-        <p className="muted">Arquivo único para Kindle (via Send to Kindle/KDP), Kobo, Apple Livros e Google Play. O corpo fica a cargo do leitor; a fonte do miolo vai embutida quando é uma das fontes livres (OFL) que vêm com o Folio. Capitulares, quebras de cena e artes de abertura vão junto, com metadados de acessibilidade.</p>
+        <p className="muted">Arquivo único para Kindle (via Send to Kindle/KDP), Kobo, Apple Livros e Google Play. O corpo fica a cargo do leitor; a fonte do miolo vai embutida quando é uma das fontes livres (OFL) que vêm com o Darkpages. Capitulares, quebras de cena e artes de abertura vão junto, com metadados de acessibilidade.</p>
         <ul className="dg-list">
           {parts.map((p) => (
             <li key={p}>{p}</li>

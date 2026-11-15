@@ -1,5 +1,5 @@
 /**
- * Os 6 temas do Folio. Cada um define paleta, tipografia e forma dos controles
+ * Os 6 temas do Darkpages. Cada um define paleta, tipografia e forma dos controles
  * como CSS custom properties aplicadas em <html>. Padrão: Sangue & Cromo.
  * Sem degradês nos controles: acentos são cores chapadas.
  */

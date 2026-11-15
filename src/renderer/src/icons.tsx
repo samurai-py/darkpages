@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 
-/** Conjunto de ícones próprio do Folio: traço 1.35, preenchimento suave e um detalhe na cor de acento. */
+/** Conjunto de ícones próprio do Darkpages: traço 1.35, preenchimento suave e um detalhe na cor de acento. */
 
 const D = { fill: 'currentColor', fillOpacity: 0.16 } as const
 const A = { style: { fill: 'var(--acc)' }, stroke: 'none' } as const

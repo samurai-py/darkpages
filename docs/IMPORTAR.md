@@ -2,13 +2,13 @@
 
 Um arquivo de texto (formato **folio-livro**, versão 1) descreve o livro inteiro: fichas, capítulos, cartões do Enredo, regras para a IA e páginas do livro. O modelo comentado está em [`modelo-livro.yaml`](modelo-livro.yaml); o app também oferece "Baixar modelo" e "Copiar modelo".
 
-No Folio:
+No Darkpages:
 
 - **Biblioteca › livro em destaque › "Importar regras e dados…"**: aplica o arquivo no livro.
 - **Biblioteca › "+ Novo livro" › "Criar a partir de arquivo…"**: cria um livro novo (precisa de `livro: titulo` e `livro: autor`).
 - **Biblioteca › "Exportar como arquivo"**: gera o mesmo formato a partir do livro (em `export/`), para editar fora e importar de volta. O texto dos capítulos só vai se você marcar a opção.
 
-Antes de gravar, o app mostra uma **prévia** (o que vai criar, atualizar, avisos e erros). Com qualquer erro, "Importar" fica desligado. Ao importar, o Folio guarda uma versão do manuscrito (Versões › "Antes de importar regras e dados").
+Antes de gravar, o app mostra uma **prévia** (o que vai criar, atualizar, avisos e erros). Com qualquer erro, "Importar" fica desligado. Ao importar, o Darkpages guarda uma versão do manuscrito (Versões › "Antes de importar regras e dados").
 
 ## O que cada seção faz
 
@@ -42,7 +42,7 @@ Toda seção é opcional.
 
 Cole este modelo e peça para preencher a partir das suas notas. Por exemplo:
 
-> Abaixo está um modelo de arquivo do Folio (YAML). Preencha-o a partir das minhas notas que vêm depois. Mantenha exatamente os nomes das chaves e os valores permitidos indicados nos comentários; apague as seções que não tiverem informação; escreva os nomes das fichas e os títulos dos capítulos sempre iguais quando forem citados em outro lugar. Responda só com o arquivo.
+> Abaixo está um modelo de arquivo do Darkpages (YAML). Preencha-o a partir das minhas notas que vêm depois. Mantenha exatamente os nomes das chaves e os valores permitidos indicados nos comentários; apague as seções que não tiverem informação; escreva os nomes das fichas e os títulos dos capítulos sempre iguais quando forem citados em outro lugar. Responda só com o arquivo.
 >
 > [cole o modelo]
 >

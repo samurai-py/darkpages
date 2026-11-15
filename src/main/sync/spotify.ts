@@ -11,10 +11,10 @@ import { call, HttpError, loopback, OfflineError, pkce, postForm, randomState, r
  * Redirect URI (regras atuais do Spotify): loopback por IP literal
  * (http://127.0.0.1:PORTA/...) ou https; "localhost" não é aceito.
  *  - padrão: http://127.0.0.1:43827/callback
- *    · desktop: o Folio escuta nessa porta e recebe o retorno sozinho;
+ *    · desktop: o Darkpages escuta nessa porta e recebe o retorno sozinho;
  *    · modo web: o navegador (em outra máquina) não alcança o servidor por
  *      127.0.0.1, então a página de retorno não carrega; o autor copia a URL
- *      da barra de endereço e cola no Folio (spotify.finalizar).
+ *      da barra de endereço e cola no Darkpages (spotify.finalizar).
  *  - https://<host>/oauth/spotify/callback: se o servidor web estiver
  *    publicado em https (ex.: `tailscale serve`), a rota HTTP do servidor
  *    recebe o retorno sozinha.

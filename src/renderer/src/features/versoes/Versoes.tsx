@@ -180,7 +180,7 @@ export function Versoes(p: {
             <div className="vs-nada">
               <span className="disp">Nenhuma versão ainda</span>
               <p className="ms-modal-p">
-                O Folio guarda o manuscrito na Arca a cada 10 minutos de escrita e antes de toda mudança que não vem de você digitando: aplicar
+                O Darkpages guarda o manuscrito na Arca a cada 10 minutos de escrita e antes de toda mudança que não vem de você digitando: aplicar
                 revisões, importar, reordenar, restaurar. Use <b>Salvar versão agora</b> para marcar um ponto que quer guardar para sempre.
               </p>
             </div>

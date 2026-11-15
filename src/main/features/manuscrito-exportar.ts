@@ -420,7 +420,7 @@ async function exportDocx(livro: Livro): Promise<Buffer> {
 
   const doc = new Document({
     title: livro.title,
-    creator: livro.author || 'Folio',
+    creator: livro.author || 'Darkpages',
     styles: { default: { document: { run: { font: 'EB Garamond', size: 24 } } } },
     footnotes,
     sections: [{ children }]

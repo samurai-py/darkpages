@@ -184,7 +184,7 @@ export function PainelInsights({ project, go }: Props): ReactElement {
             <div className="ins-meta">
               <span className="ins-tag">{NOME_TIPO_INSIGHT[i.tipo] ?? i.tipo}</span>
               {i.capitulo && <span className="ins-cap">{titulo(i.capitulo)}</span>}
-              <span className="ins-origem" title={i.origem === 'ia' ? 'Gerado pela IA' : 'Checagem local do Folio (nada sai do computador)'}>
+              <span className="ins-origem" title={i.origem === 'ia' ? 'Gerado pela IA' : 'Checagem local do Darkpages (nada sai do computador)'}>
                 {i.origem === 'ia' ? 'IA' : 'local'}
               </span>
               {i.status !== 'novo' && i.status !== 'visto' && <span className="ins-cap">{i.status}</span>}

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# LanguageTool local para o Revisor do Folio (Ajustes → Revisor → Servidor próprio).
+# LanguageTool local para o Revisor do Darkpages (Ajustes → Revisor → Servidor próprio).
 #
 # Baixa o pacote oficial (https://languagetool.org/download/LanguageTool-stable.zip,
 # LGPL 2.1+) uma vez para ~/.local/share/folio/languagetool (fora do repositório)
 # e sobe o servidor HTTP em 127.0.0.1:8081. Por padrão o servidor do
-# LanguageTool só aceita conexões desta máquina (sem --public); o Folio usa
+# LanguageTool só aceita conexões desta máquina (sem --public); o Darkpages usa
 # http://127.0.0.1:8081.
 # Comando conforme https://dev.languagetool.org/http-server e o --help do 6.6:
 #   java -cp languagetool-server.jar org.languagetool.server.HTTPServer --config server.properties --port 8081
-# Sem --allow-origin de propósito: o Folio chama o servidor pelo processo
+# Sem --allow-origin de propósito: o Darkpages chama o servidor pelo processo
 # principal (Node), não pelo navegador, e "--allow-origin" sem valor libera
 # qualquer site aberto no navegador a usar o servidor (Access-Control-Allow-Origin: *).
 #
@@ -87,7 +87,7 @@ case "${1:-}" in
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now folio-languagetool
 [Unit]
-Description=LanguageTool local para o Folio (127.0.0.1:$PORTA)
+Description=LanguageTool local para o Darkpages (127.0.0.1:$PORTA)
 After=network.target
 
 [Service]

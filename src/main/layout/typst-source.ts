@@ -447,7 +447,7 @@ function colophon(meta: ProjectMeta, l: FullLayout): string {
   if (!l.front.colofao) return ''
   const text =
     l.front.colofaoTexto.trim() ||
-    `Este livro foi composto em ${l.font}, corpo ${String(l.bodyPt).replace('.', ',')}, e diagramado no Folio.`
+    `Este livro foi composto em ${l.font}, corpo ${String(l.bodyPt).replace('.', ',')}, e diagramado no Darkpages.`
   return `// Colofão
 #pagebreak(to: pag-par, weak: true)
 #{[
@@ -507,7 +507,7 @@ export function buildBookTypst(
   const headerAscent = Math.max(4, l.margins.topMm * 0.45)
   const footerDescent = Math.max(4, l.margins.bottomMm * 0.4)
 
-  return `// Gerado pelo Folio. Não edite: é refeito a cada exportação.
+  return `// Gerado pelo Darkpages. Não edite: é refeito a cada exportação.
 #set document(title: ${str(meta.title)}, author: ${str(meta.author || 'Autor')})
 
 #let livro-titulo = ${str(meta.title)}

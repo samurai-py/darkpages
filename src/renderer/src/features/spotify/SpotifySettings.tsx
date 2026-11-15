@@ -143,7 +143,7 @@ export function SpotifySettings(): ReactElement {
           <li>Entre em <a className="sy-link" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a> com sua conta (o dono do app precisa ter Premium) e clique em <b>Create app</b>.</li>
           <li>Nome e descrição livres. Em <b>Redirect URIs</b>, adicione exatamente <code>{uri}</code>. O Spotify não aceita “localhost”, só <code>127.0.0.1</code> ou https.</li>
           <li>Em <b>Which API/SDKs are you planning to use?</b>, marque <b>Web API</b>, aceite os termos e salve.</li>
-          <li>Abra <b>Settings</b> do app e copie o <b>Client ID</b> para o campo acima. Não é preciso o Client secret (o Folio usa PKCE).</li>
+          <li>Abra <b>Settings</b> do app e copie o <b>Client ID</b> para o campo acima. Não é preciso o Client secret (o Darkpages usa PKCE).</li>
           <li>Em <b>User Management</b>, adicione o e-mail da conta Spotify que vai usar (apps em modo de desenvolvimento aceitam até 5 usuários).</li>
           {isWeb ? (
             <li>
@@ -151,7 +151,7 @@ export function SpotifySettings(): ReactElement {
               (ex.: <code>tailscale serve</code>), cadastre <code>https://SEU-ENDERECO/oauth/spotify/callback</code> no Spotify e preencha o mesmo valor em Redirect URI acima.
             </li>
           ) : (
-            <li>Clique em <b>Conectar Spotify</b>: o navegador abre, você autoriza e o Folio recebe o retorno sozinho na porta 43827.</li>
+            <li>Clique em <b>Conectar Spotify</b>: o navegador abre, você autoriza e o Darkpages recebe o retorno sozinho na porta 43827.</li>
           )}
         </ol>
       </details>

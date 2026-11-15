@@ -25,7 +25,7 @@ const DEVICE_URL = 'https://oauth2.googleapis.com/device/code'
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
 export const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file openid email'
 export const ESCOPO_FALTANDO =
-  'O Google não deu acesso ao Drive. Clique em Desconectar, depois em Conectar, e na tela do Google deixe marcada a opção de ver e editar os arquivos criados pelo Folio.'
+  'O Google não deu acesso ao Drive. Clique em Desconectar, depois em Conectar, e na tela do Google deixe marcada a opção de ver e editar os arquivos criados pelo Darkpages.'
 
 export interface DriveSettings {
   clientId?: string
@@ -238,7 +238,7 @@ export class GoogleAuth {
     const concedidos = typeof tok['scope'] === 'string' ? tok['scope'] : ''
     if (concedidos && !concedidos.includes('auth/drive.file')) throw new AuthError(ESCOPO_FALTANDO)
     const refresh = typeof tok['refresh_token'] === 'string' ? tok['refresh_token'] : ''
-    if (!refresh) throw new Error('O Google não devolveu um refresh token. Remova o acesso do Folio na sua conta Google e conecte de novo.')
+    if (!refresh) throw new Error('O Google não devolveu um refresh token. Remova o acesso do Darkpages na sua conta Google e conecte de novo.')
     const at = typeof tok['access_token'] === 'string' ? tok['access_token'] : ''
     const exp = Number(tok['expires_in'] ?? 3600)
     if (at) this.access = { token: at, exp: Date.now() + (exp - 60) * 1000 }

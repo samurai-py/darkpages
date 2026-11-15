@@ -2,7 +2,7 @@
   "name": "folio",
   "version": "0.1.0",
   "private": true,
-  "description": "Folio — escrever, organizar e diagramar livros",
+  "description": "Darkpages — escrever, organizar e diagramar livros",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

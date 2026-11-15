@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 
-/** Ícones das ferramentas do editor de mapas, no mesmo traço do conjunto do Folio. */
+/** Ícones das ferramentas do editor de mapas, no mesmo traço do conjunto do Darkpages. */
 
 const D = { fill: 'currentColor', fillOpacity: 0.16 } as const
 const A = { style: { fill: 'var(--acc)' }, stroke: 'none' } as const

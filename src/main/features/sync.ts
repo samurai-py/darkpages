@@ -114,7 +114,7 @@ export const handlers: Handlers = {
 export async function spotifyCallbackRoute(ctx: Ctx, _req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   if (url.pathname !== SPOTIFY_HTTPS_PATH) return false
   let ok = true
-  let msg = 'Spotify conectado. Pode fechar esta aba e voltar ao Folio.'
+  let msg = 'Spotify conectado. Pode fechar esta aba e voltar ao Darkpages.'
   try {
     await svc(ctx).spotify.finalizarParams(url.searchParams)
   } catch (e) {

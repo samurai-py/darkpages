@@ -132,7 +132,7 @@ export function escapeHtml(s: string): string {
 
 /** Página simples mostrada no navegador ao fim do OAuth. */
 export function donePage(ok: boolean, msg: string): string {
-  return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Folio</title>
+  return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Darkpages</title>
 <body style="font-family:system-ui,sans-serif;background:#070707;color:#ededed;display:grid;place-items:center;height:100vh;margin:0">
 <main style="max-width:420px;text-align:center"><h1 style="font-weight:500">${ok ? 'Conectado' : 'Não deu certo'}</h1>
 <p style="color:#9a9a9a">${escapeHtml(msg)}</p></main></body></html>`
@@ -182,7 +182,7 @@ export function loopback(path: string, port = 0, timeoutMs = 5 * 60_000): Promis
       res.end(
         donePage(
           !err,
-          err ? `O provedor respondeu: ${err}. Volte ao Folio e tente de novo.` : 'Pode fechar esta aba e voltar ao Folio.'
+          err ? `O provedor respondeu: ${err}. Volte ao Darkpages e tente de novo.` : 'Pode fechar esta aba e voltar ao Darkpages.'
         )
       )
       settle(url.searchParams)

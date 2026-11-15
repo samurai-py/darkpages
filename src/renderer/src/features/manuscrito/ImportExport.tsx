@@ -68,7 +68,7 @@ export function Importar({
       {!previa ? (
         <div className="ms-form">
           <p className="ms-modal-p">
-            Escolha um arquivo <b>.docx</b>, <b>.txt</b> ou <b>.md</b>. O Folio separa os capítulos pelo Título 1 do Word ou por linhas como
+            Escolha um arquivo <b>.docx</b>, <b>.txt</b> ou <b>.md</b>. O Darkpages separa os capítulos pelo Título 1 do Word ou por linhas como
             “Capítulo 3”, “CAPÍTULO III”, “Prólogo”. Itálico, negrito e notas de rodapé do Word são mantidos. Os capítulos entram no fim do
             livro.
           </p>

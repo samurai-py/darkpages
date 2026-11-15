@@ -473,7 +473,7 @@ export function lerArquivo(texto: string): Leitura {
     return { dados: null, avisos: ctx.avisos, erros: ctx.erros }
   }
   if (raiz.versao !== undefined && raiz.versao !== VERSAO_LIVRO) {
-    ctx.erro(['versao'], `versão ${String(raiz.versao)} não é suportada por este Folio (só a versão ${VERSAO_LIVRO}).`)
+    ctx.erro(['versao'], `versão ${String(raiz.versao)} não é suportada por este Darkpages (só a versão ${VERSAO_LIVRO}).`)
     return { dados: null, avisos: ctx.avisos, erros: ctx.erros }
   }
 

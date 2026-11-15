@@ -145,7 +145,7 @@ export function App(): ReactElement {
       <header className="topbar">
         <div className="brand">
           <Emblem />
-          <span className="name">Folio</span>
+          <span className="name">Darkpages</span>
           <span className="crumb">
             {project ? <>{project.meta.title} / </> : null}
             <b>{CRUMB[screen]}</b>

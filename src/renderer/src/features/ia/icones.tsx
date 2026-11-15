@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 
-/** Ícones pequenos da feature IA (traço 1.6, mesmo estilo do conjunto do Folio). */
+/** Ícones pequenos da feature IA (traço 1.6, mesmo estilo do conjunto do Darkpages). */
 
 export type IconeIa = 'check' | 'x' | 'brilho' | 'refazer' | 'local' | 'nuvem' | 'alerta' | 'chave' | 'olho' | 'manter' | 'ritmo' | 'lixo'
 

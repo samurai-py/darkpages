@@ -363,14 +363,14 @@ export function montarFonte(l: Pick<Lingua, 'nome' | 'glifos'>): FonteMontada {
       .replace(/\p{M}/gu, '')
       .replace(/[^A-Za-z0-9 ]+/g, '')
       .trim()
-      .slice(0, 40) || 'Folio Idioma'
+      .slice(0, 40) || 'Darkpages Idioma'
   const font = new Font({
     familyName,
     styleName: 'Regular',
     unitsPerEm: UPM,
     ascender: 800,
     descender: -200,
-    designer: 'Folio',
+    designer: 'Darkpages',
     description: `Alfabeto de ${l.nome}`,
     glyphs
   } as ConstructorParameters<typeof Font>[0])

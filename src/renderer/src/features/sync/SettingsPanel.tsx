@@ -105,7 +105,7 @@ function DriveSettings(): ReactElement {
       <p className="sy-hint">
         Salvamento automático espelhado: o livro continua salvo neste {isWeb ? 'servidor' : 'computador'} e, a cada ~30 segundos,
         os arquivos que mudaram sobem para a pasta <code>Folio/&lt;pasta do livro&gt;</code> do seu Drive. Sem internet, as mudanças
-        esperam numa fila. Se o mesmo arquivo mudar aqui e no Drive, o Folio guarda as duas versões e avisa.
+        esperam numa fila. Se o mesmo arquivo mudar aqui e no Drive, o Darkpages guarda as duas versões e avisa.
       </p>
 
       {c?.conectado && (
@@ -168,7 +168,7 @@ function DriveSettings(): ReactElement {
       {p?.modo === 'navegador' && (
         <div className="sy-device" role="status">
           <span className="sy-hint">Abrimos a página do Google no seu navegador. Se ela não abriu, use este link:</span>
-          <a className="sy-link" href={p.url} target="_blank" rel="noopener noreferrer">Autorizar o Folio no Google</a>
+          <a className="sy-link" href={p.url} target="_blank" rel="noopener noreferrer">Autorizar o Darkpages no Google</a>
         </div>
       )}
       {(erro ?? c?.erro) && <p className="err" role="alert">{erro ?? c?.erro}</p>}
@@ -176,9 +176,9 @@ function DriveSettings(): ReactElement {
       <details className="sy-details">
         <summary>Privacidade</summary>
         <p className="sy-hint">
-          O Folio pede só o escopo <code>drive.file</code>: ele enxerga e altera apenas os arquivos que ele mesmo criou no seu Drive,
+          O Darkpages pede só o escopo <code>drive.file</code>: ele enxerga e altera apenas os arquivos que ele mesmo criou no seu Drive,
           nunca o resto. As credenciais ficam no arquivo de configurações deste {isWeb ? 'servidor' : 'computador'} (permissão só do
-          seu usuário) e nada passa por servidores de terceiros: o Folio fala direto com o Google. Ao desconectar, o acesso é revogado.
+          seu usuário) e nada passa por servidores de terceiros: o Darkpages fala direto com o Google. Ao desconectar, o acesso é revogado.
           Arquivos removidos do livro vão para a lixeira do Drive (recuperáveis por 30 dias).
         </p>
       </details>
@@ -186,16 +186,16 @@ function DriveSettings(): ReactElement {
       <details className="sy-details">
         <summary>Passo a passo: criar o acesso no Google Cloud</summary>
         <ol className="sy-steps">
-          <li>Abra <a className="sy-link" href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">console.cloud.google.com</a> e crie um projeto (ex.: “Folio”).</li>
+          <li>Abra <a className="sy-link" href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">console.cloud.google.com</a> e crie um projeto (ex.: “Darkpages”).</li>
           <li>Em <b>APIs e serviços → Biblioteca</b>, procure <b>Google Drive API</b> e clique em <b>Ativar</b>.</li>
-          <li>Em <b>Google Auth Platform</b> (tela de consentimento OAuth): tipo <b>Externo</b>, nome do app “Folio” e seu e-mail. Em <b>Público-alvo</b>, adicione seu e-mail Google como usuário de teste. Em <b>Acesso a dados</b>, adicione o escopo <code>.../auth/drive.file</code>.</li>
-          {!isWeb && <li>Em <b>Clientes → Criar cliente</b>, escolha <b>App para computador</b>. Copie o ID e a chave secreta para os dois primeiros campos acima. Não há URI de redirecionamento para cadastrar: o Folio usa <code>http://127.0.0.1</code> numa porta livre.</li>}
+          <li>Em <b>Google Auth Platform</b> (tela de consentimento OAuth): tipo <b>Externo</b>, nome do app “Darkpages” e seu e-mail. Em <b>Público-alvo</b>, adicione seu e-mail Google como usuário de teste. Em <b>Acesso a dados</b>, adicione o escopo <code>.../auth/drive.file</code>.</li>
+          {!isWeb && <li>Em <b>Clientes → Criar cliente</b>, escolha <b>App para computador</b>. Copie o ID e a chave secreta para os dois primeiros campos acima. Não há URI de redirecionamento para cadastrar: o Darkpages usa <code>http://127.0.0.1</code> numa porta livre.</li>}
           <li>
             {isWeb ? 'Em ' : 'Para usar o modo web (navegador em outro computador), em '}
             <b>Clientes → Criar cliente</b>, escolha <b>TVs e dispositivos de entrada limitada</b> e copie o ID e a chave secreta para os campos “TVs e dispositivos”.
-            Nesse modo o Folio mostra um código, que você digita em <code>google.com/device</code> em qualquer aparelho.
+            Nesse modo o Darkpages mostra um código, que você digita em <code>google.com/device</code> em qualquer aparelho.
           </li>
-          <li>Clique em <b>Conectar conta Google</b> e autorize. Se aparecer “o Google não verificou este app”, é o seu próprio app: clique em <b>Avançado → Acessar Folio</b>.</li>
+          <li>Clique em <b>Conectar conta Google</b> e autorize. Se aparecer “o Google não verificou este app”, é o seu próprio app: clique em <b>Avançado → Acessar Darkpages</b>.</li>
           <li>
             Importante: enquanto o app estiver com status <b>Em teste</b>, o Google faz a autorização vencer em <b>7 dias</b> e será preciso conectar de novo.
             Para não vencer, em <b>Público-alvo</b> clique em <b>Publicar app</b> (status “Em produção”). Como <code>drive.file</code> é um escopo não sensível,

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 
-/** Ícones da tela Idioma, no mesmo traço do conjunto do Folio (1.35, pontas redondas, detalhe no acento). */
+/** Ícones da tela Idioma, no mesmo traço do conjunto do Darkpages (1.35, pontas redondas, detalhe no acento). */
 
 export type IconeIdioma = 'sortear' | 'mais' | 'lixo' | 'baixar' | 'importar' | 'ia' | 'traco' | 'curva' | 'mover' | 'apagar' | 'novoTraco' | 'desfazer' | 'fonte'
 

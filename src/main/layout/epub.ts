@@ -421,7 +421,7 @@ export async function exportEpub(dir: string, resourcesDir?: string): Promise<Ep
     spine.push(item)
   }
 
-  // fonte do miolo embutida quando é uma fonte OFL que vem com o Folio (resources/fonts)
+  // fonte do miolo embutida quando é uma fonte OFL que vem com o Darkpages (resources/fonts)
   const fonte = resourcesDir ? await bundledFont(resourcesDir, l.font) : null
   const fontFaces: string[] = []
   if (fonte) {
@@ -586,7 +586,7 @@ ${notesSection(sink)}
   }
 
   if (f.colofao) {
-    const text = f.colofaoTexto.trim() || `Este livro foi composto em ${l.font} e diagramado no Folio.`
+    const text = f.colofaoTexto.trim() || `Este livro foi composto em ${l.font} e diagramado no Darkpages.`
     xhtml(
       { id: 'colofao', href: 'colofao.xhtml', title: 'Colofão', inToc: false },
       page('Colofão', `<section class="colofao" epub:type="colophon" role="doc-colophon"><p>${multiline(text)}</p></section>`, 'backmatter')

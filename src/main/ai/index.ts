@@ -322,7 +322,7 @@ export function avisoContextoGrande(necessario: number, limite: number): string 
   const fmt = (n: number): string => n.toLocaleString('pt-BR')
   return (
     `O pedido ficou grande demais para a IA local: cerca de ${fmt(necessario)} tokens, e o limite configurado é ${fmt(limite)}. ` +
-    'Para não cortar parte do texto sem avisar, o Folio não enviou. Tente um capítulo menor (divida-o), ' +
+    'Para não cortar parte do texto sem avisar, o Darkpages não enviou. Tente um capítulo menor (divida-o), ' +
     'ou use um provedor na nuvem em Ajustes → IA, que aceita textos maiores.'
   )
 }

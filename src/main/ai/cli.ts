@@ -5,14 +5,14 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /**
- * IA pela ASSINATURA do usuário: o Folio chama os programas oficiais
+ * IA pela ASSINATURA do usuário: o Darkpages chama os programas oficiais
  * (Claude Code e Codex) já logados nesta máquina. Nenhum token é lido ou
  * copiado; cada programa usa o próprio login.
  *
  * Segurança: o texto do livro é conteúdo não confiável (pode conter
  * "instruções"). Por isso:
  * - Claude Code roda com TODAS as ferramentas desligadas (`--tools ""`) e
- *   com o system prompt substituído pelo do Folio;
+ *   com o system prompt substituído pelo do Darkpages;
  * - Codex roda em sandbox somente leitura, efêmero, numa pasta vazia;
  * - ambos rodam numa pasta temporária vazia, apagada no fim.
  */
@@ -93,7 +93,7 @@ function explicaFalha(kind: CliKind, stderr: string, stdout: string): Error {
 
 /**
  * Envia um pedido de texto pela assinatura.
- * `prompt` já contém toda a conversa; `system` são as instruções do Folio.
+ * `prompt` já contém toda a conversa; `system` são as instruções do Darkpages.
  */
 export async function chatViaCli(kind: CliKind, system: string, prompt: string, timeoutMs: number, modelo = ''): Promise<string> {
   if (modelo && !MODELO_CLI_RE.test(modelo)) throw new Error(`Nome de modelo inválido para o ${NOME[kind]}.`)

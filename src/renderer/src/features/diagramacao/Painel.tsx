@@ -31,7 +31,7 @@ interface Props {
   checking: boolean
 }
 
-const ORIGEM = { projeto: 'do Folio', typst: 'do Typst', sistema: 'do sistema' } as const
+const ORIGEM = { projeto: 'do Darkpages', typst: 'do Typst', sistema: 'do sistema' } as const
 
 export function Painel({ dir, l, set, pages, fontes, checks, checking }: Props): ReactElement {
   const trimKey = TRIMS.findIndex((t) => t.w === l.trim.widthMm && t.h === l.trim.heightMm)
@@ -313,7 +313,7 @@ export function Painel({ dir, l, set, pages, fontes, checks, checking }: Props):
         </label>
         {f.colofao && (
           <div className="dg-fm">
-            <TextField label="Texto do colofão" multiline value={f.colofaoTexto} placeholder="Em branco: fonte, corpo e “diagramado no Folio”" onChange={(v) => setF({ colofaoTexto: v })} />
+            <TextField label="Texto do colofão" multiline value={f.colofaoTexto} placeholder="Em branco: fonte, corpo e “diagramado no Darkpages”" onChange={(v) => setF({ colofaoTexto: v })} />
           </div>
         )}
       </fieldset>

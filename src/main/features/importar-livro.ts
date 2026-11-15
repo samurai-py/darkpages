@@ -741,7 +741,7 @@ export function planejar(estado: EstadoLivro, dados: ArquivoLivro, agora = new D
     criar.push({ secao: 'manter', nome: `manter o trecho “${curto(t, 60)}”` })
   }
 
-  if (!alvoVazio(alvo)) notas.push('Antes de gravar, o Folio guarda uma versão do manuscrito (Versões › “Antes de importar regras e dados”). Nada é apagado.')
+  if (!alvoVazio(alvo)) notas.push('Antes de gravar, o Darkpages guarda uma versão do manuscrito (Versões › “Antes de importar regras e dados”). Nada é apagado.')
   return { previa: { criar, atualizar, avisos, erros, notas }, alvo }
 }
 
@@ -982,7 +982,7 @@ export function exportarYaml(estado: EstadoLivro, opcoes: OpcoesExport = {}): st
   }
   const rep = [...repetidos(estado.fichas.map((f) => f.nome)), ...repetidos(estado.capitulos.map((c) => c.titulo)), ...repetidos(cartoes.map((c) => c.titulo))]
   const cabecalho = [
-    `# Folio — ${estado.title} (formato ${FORMATO_LIVRO}, versão ${VERSAO_LIVRO})`,
+    `# Darkpages — ${estado.title} (formato ${FORMATO_LIVRO}, versão ${VERSAO_LIVRO})`,
     `# Exportado em ${new Date().toLocaleString('pt-BR')}. Edite e importe de novo: o que existe é atualizado`,
     '# (casando por nome/título), o que falta é criado, nada é apagado. Ver docs/IMPORTAR.md.',
     opcoes.comTexto ? '# Inclui o texto dos capítulos: só entra em capítulos novos (ou com substituir_texto: true).' : '# Sem o texto dos capítulos.',

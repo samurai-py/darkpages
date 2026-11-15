@@ -1,5 +1,5 @@
 /**
- * Folio em modo web: serve a interface construída (out/renderer) e a mesma
+ * Darkpages em modo web: serve a interface construída (out/renderer) e a mesma
  * API do app desktop via HTTP (POST /api/<método>, corpo = lista de argumentos).
  *
  *   FOLIO_HOST     IP para escutar (padrão 127.0.0.1; use o IP do Tailscale)
@@ -186,5 +186,5 @@ const server = createServer((req, res) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Folio web em http://${HOST}:${PORT}  (livros novos em ${ctx.libraryDir})`)
+  console.log(`Darkpages web em http://${HOST}:${PORT}  (livros novos em ${ctx.libraryDir})`)
 })

@@ -10,3 +10,7 @@ spike-output/
 resources/fonts/*/
 # dicionário de sinônimos baixado por npm run fetch:tesauro (licenças junto)
 resources/thesaurus/
+
+# índice local do aag (gerado)
+.aag/
+.aag.lock

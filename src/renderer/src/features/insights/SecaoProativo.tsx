@@ -7,7 +7,7 @@ import { NOME_TIPO_INSIGHT } from './tipos'
 /** Ajustes → IA → Modo proativo (seção "proativo"). */
 
 const MODOS: Array<{ id: ProativoModo; nome: string; desc: string }> = [
-  { id: 'off', nome: 'Desligado', desc: 'O Folio só analisa quando você pede.' },
+  { id: 'off', nome: 'Desligado', desc: 'O Darkpages só analisa quando você pede.' },
   {
     id: 'leve',
     nome: 'Leve',
@@ -79,7 +79,7 @@ export function SecaoProativo(): ReactElement {
       <header className="aj-sh">
         <h2 id="aj-h-pro" className="disp">Modo proativo</h2>
         <p>
-          O Folio observa enquanto você escreve e deixa observações no sininho do topo, sem interromper. Nada dispara no modo foco nem no horário
+          O Darkpages observa enquanto você escreve e deixa observações no sininho do topo, sem interromper. Nada dispara no modo foco nem no horário
           silencioso, e nada é aplicado no texto sem você clicar.
         </p>
       </header>
