@@ -19,8 +19,8 @@
     "setup": "npm run fetch:typst && npm run fetch:fonts && npm run fetch:tesauro",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dist": "electron-vite build && electron-builder",
-    "dist:win": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.1.0",
