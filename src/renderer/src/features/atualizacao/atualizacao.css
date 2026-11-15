@@ -1,0 +1,12 @@
+/* Faixa e cartão de atualização: só tokens do tema. */
+.atu {
+  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 20px;
+  border-bottom: 1px solid var(--line); background: var(--chipbg); font-size: 13px;
+}
+.atu-t { flex: 1; min-width: 220px; color: var(--text); line-height: 1.45; }
+.atu-t b { font-weight: 600; color: var(--acc); }
+.atu-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--rad); background: var(--chipbg); }
+.atu-card p { margin: 0; }
+.atu-v { font-size: 14px; }
+.atu-s { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.atu-ac { display: flex; flex-wrap: wrap; gap: 8px; }

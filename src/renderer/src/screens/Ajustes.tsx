@@ -6,16 +6,18 @@ import { ArteSettingsPanel } from '../features/arte/SettingsPanel'
 import { SyncSettingsPanel } from '../features/sync/SettingsPanel'
 import { SecaoProativo } from '../features/insights/SecaoProativo'
 import './ajustes.css'
+import { SecaoAtualizacao } from '../features/atualizacao/Atualizacao'
 
 /** Configurações do app (IA, revisor, arte, Drive, Spotify). Não depende de livro aberto. */
 
-type Secao = 'ia' | 'revisor' | 'arte' | 'sync'
+type Secao = 'ia' | 'revisor' | 'arte' | 'sync' | 'atualizacao'
 
 const SECOES: Array<{ id: Secao; nome: string; desc: string }> = [
   { id: 'ia', nome: 'Inteligência artificial', desc: 'Provedor, modelo e chaves' },
   { id: 'revisor', nome: 'Revisor', desc: 'Ortografia e gramática' },
   { id: 'arte', nome: 'Arte', desc: 'Gerador de imagens' },
-  { id: 'sync', nome: 'Sincronização', desc: 'Google Drive e Spotify' }
+  { id: 'sync', nome: 'Sincronização', desc: 'Google Drive e Spotify' },
+  { id: 'atualizacao', nome: 'Atualizações', desc: 'Versão e novidades' }
 ]
 
 const PROVEDORES: Array<{ id: Provedor; nome: string; desc: string; externo: boolean }> = [
@@ -643,6 +645,7 @@ export function Ajustes(): ReactElement {
             <ArteSettingsPanel />
           </section>
         )}
+        {secao === 'atualizacao' && <SecaoAtualizacao />}
         {secao === 'sync' && (
           <section className="aj-sec" aria-labelledby="aj-h-sync">
             <header className="aj-sh">

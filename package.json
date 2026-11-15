@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Darkpages — escrever, organizar e diagramar livros",
   "main": "./out/main/index.js",
@@ -34,6 +34,7 @@
     "@tiptap/starter-kit": "^2.27.3",
     "@xyflow/react": "^12.12.1",
     "docx": "^9.15.3",
+    "electron-updater": "^6.8.11",
     "jszip": "^3.10.2",
     "mammoth": "^1.13.0",
     "opentype.js": "^1.3.4",
@@ -119,6 +120,13 @@
     "artifactName": "Darkpages-${version}-${os}-${arch}.${ext}",
     "portable": {
       "artifactName": "Darkpages-Portatil-${version}.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "samurai-py",
+        "repo": "darkpages"
+      }
+    ]
   }
 }

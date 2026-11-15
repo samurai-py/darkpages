@@ -1,3 +1,4 @@
+import { FaixaAtualizacao } from './features/atualizacao/Atualizacao'
 import { useEffect, useState, type ReactElement } from 'react'
 import { call } from './api'
 import type { Project } from '../../shared/types'
@@ -187,6 +188,7 @@ export function App(): ReactElement {
           ))}
         </div>
       </header>
+      <FaixaAtualizacao />
       <div className="body">
         <nav className="rail" aria-label="Seções">
           {RAIL.map(railButton)}

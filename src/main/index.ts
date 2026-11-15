@@ -3,8 +3,12 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { recentsStore } from './recents'
 import { dispatch } from './api/registry'
+import { tratarAtualizacao, verificarAoAbrir } from './atualizar'
 import type { Ctx } from './api/context'
 import type { Project } from '../shared/types'
+
+// pasta de configurações com nome fixo (não depende do nome do produto no pacote): %APPDATA%\Darkpages, ~/.config/Darkpages
+app.setPath('userData', join(app.getPath('appData'), 'Darkpages'))
 
 /** Livros abertos nesta sessão + recentes: só esses podem ser lidos/escritos. */
 const allowedDirs = new Set<string>()
@@ -62,9 +66,12 @@ void app.whenReady().then(() => {
   const ctx = makeCtx()
   ipcMain.handle('invoke', (_e, method: unknown, args: unknown) => {
     if (typeof method !== 'string' || !Array.isArray(args)) throw new Error('Chamada inválida')
+    const atu = tratarAtualizacao(method)
+    if (atu) return atu
     return dispatch(ctx, method, args)
   })
   createWindow()
+  verificarAoAbrir()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
