@@ -3,11 +3,14 @@ import type { ChapterInfo, ChapterKind } from '../../../../shared/types'
 import { Ico } from './icones'
 import { Modal } from './Modal'
 import { fmt } from './texto'
+import { metasEfetivas, somaPlanejada, type MetaCap } from '../../../../shared/metas'
 import { comoNumeracao, dentroDeParte, numerarItens, romano, rotuloTela, type Numeracao, type RotuloCfg } from '../../../../shared/rotulo'
 
 export interface Metas {
   metaCapitulo: number
   metaLivro: number
+  /** meta própria e "pronto" por capítulo (chave = id do capítulo) */
+  capitulos?: Record<string, MetaCap>
 }
 
 interface Props {
@@ -67,6 +70,7 @@ export function ChapterList(p: Props): ReactElement {
   const [renomeando, setRenomeando] = useState<{ file: string; titulo: string } | null>(null)
   const [excluir, setExcluir] = useState<ChapterInfo | null>(null)
   const [editMetas, setEditMetas] = useState(false)
+  const [editCap, setEditCap] = useState<ChapterInfo | null>(null)
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [alvo, setAlvo] = useState<{ file: string; antes: boolean } | null>(null)
   const [ocupado, setOcupado] = useState(false)
@@ -76,6 +80,17 @@ export function ChapterList(p: Props): ReactElement {
   const emParte = dentroDeParte(caps)
   const palavras = (c: ChapterInfo): number => (c.file === p.atual ? p.palavrasAtual : c.words)
   const total = caps.reduce((s, c) => s + palavras(c), 0)
+  const efetivas = metasEfetivas(caps.map((c) => ({ id: c.id, kind: c.kind, words: palavras(c) })), p.metas.metaCapitulo, p.metas.capitulos)
+  /** grava a meta própria / "pronto" de um capítulo (remove a entrada quando volta ao padrão) */
+  const mudarCap = (id: string, patch: MetaCap): void => {
+    const todas = { ...(p.metas.capitulos ?? {}) }
+    const novo: MetaCap = { ...todas[id], ...patch }
+    if (!novo.meta) delete novo.meta
+    if (!novo.pronto) delete novo.pronto
+    if (novo.meta === undefined && !novo.pronto) delete todas[id]
+    else todas[id] = novo
+    p.onMetas({ ...p.metas, capitulos: todas })
+  }
   const pct = p.metas.metaLivro > 0 ? Math.min(1, total / p.metas.metaLivro) : 0
   const R = 19
   const circ = 2 * Math.PI * R
@@ -189,10 +204,17 @@ export function ChapterList(p: Props): ReactElement {
       <ol className="ms-lista" onDragLeave={() => setAlvo(null)}>
         {caps.map((c, i) => {
           const w = palavras(c)
-          const prog = p.metas.metaCapitulo > 0 ? Math.min(1, w / p.metas.metaCapitulo) : 0
+          const mc = efetivas.get(c.id)
+          const meta = mc?.efetiva ?? 0
+          const prog = meta > 0 ? Math.min(1, w / meta) : 0
+          const dica = mc
+            ? `${fmt(w)} palavras${meta > 0 ? ` de ${fmt(meta)}` : ''}${mc.pronto ? ' · pronto' : ''}` +
+              (!mc.pronto && mc.ajuste ? ` · meta ${mc.ajuste > 0 ? 'aumentada' : 'reduzida'} em ${fmt(Math.abs(mc.ajuste))} por capítulos anteriores prontos (planejada: ${fmt(mc.planejada)})` : '')
+            : ''
           const aberto = menu === c.file
           const cls = ['ms-ch']
           const parte = c.kind === 'parte'
+          if (mc?.pronto) cls.push('pronto')
           if (parte) cls.push('ms-parte')
           else if (emParte[i]) cls.push('em-parte')
           if (arrastando === c.file) cls.push('drag')
@@ -278,13 +300,17 @@ export function ChapterList(p: Props): ReactElement {
                             role="progressbar"
                             aria-label={`Progresso de ${c.title}`}
                             aria-valuemin={0}
-                            aria-valuemax={p.metas.metaCapitulo}
+                            aria-valuemax={meta}
                             aria-valuenow={w}
+                            aria-valuetext={dica}
                           >
                             <span style={{ width: `${prog * 100}%` }} />
                           </span>
                         </span>
-                        <span className="ms-ch-w">{fmt(w)}</span>
+                        <span className="ms-ch-w" title={dica}>
+                          {mc?.pronto ? '✓ ' : ''}
+                          {meta > 0 ? `${Math.round((w / meta) * 100)}%` : fmt(w)}
+                        </span>
                       </>
                     )}
                   </button>
@@ -308,6 +334,22 @@ export function ChapterList(p: Props): ReactElement {
                       <button type="button" role="menuitem" disabled={i === caps.length - 1 || ocupado} onClick={() => mover(c.file, 1)}>
                         <Ico n="descer" size={14} /> Descer
                       </button>
+                      {!parte && (
+                        <>
+                          <span className="ms-menu-sep" />
+                          <button type="button" role="menuitem" onClick={() => (setEditCap(c), setMenu(null))}>
+                            <Ico n="lapis" size={14} /> Meta deste capítulo…
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            title={mc?.pronto ? 'Volta a contar como em andamento' : 'Ficou bom assim: o que faltou (ou passou) da meta é repartido entre os capítulos seguintes'}
+                            onClick={() => (mudarCap(c.id, { pronto: !mc?.pronto }), setMenu(null))}
+                          >
+                            <Ico n="lapis" size={14} /> {mc?.pronto ? 'Reabrir capítulo' : 'Marcar como pronto'}
+                          </button>
+                        </>
+                      )}
                       <span className="ms-menu-sep" />
                       {(['capitulo', 'prologo', 'epilogo', 'parte'] as ChapterKind[]).map((k) => (
                         <button
@@ -374,7 +416,23 @@ export function ChapterList(p: Props): ReactElement {
         </span>
       </button>
 
-      {editMetas && <MetasForm metas={p.metas} onClose={() => setEditMetas(false)} onSave={(m) => (p.onMetas(m), setEditMetas(false))} />}
+      {editMetas && (
+        <MetasForm
+          metas={p.metas}
+          soma={somaPlanejada(caps, p.metas.metaCapitulo, p.metas.capitulos)}
+          onClose={() => setEditMetas(false)}
+          onSave={(m) => (p.onMetas({ ...p.metas, ...m }), setEditMetas(false))}
+        />
+      )}
+      {editCap && (
+        <MetaCapForm
+          titulo={editCap.title}
+          padrao={p.metas.metaCapitulo}
+          atual={p.metas.capitulos?.[editCap.id]?.meta}
+          onClose={() => setEditCap(null)}
+          onSave={(meta) => (mudarCap(editCap.id, { meta }), setEditCap(null))}
+        />
+      )}
 
       {excluir && (
         <Modal titulo={excluir.kind === 'parte' ? 'Excluir parte' : 'Excluir capítulo'} onClose={() => setExcluir(null)}>
@@ -415,7 +473,49 @@ function ConfirmaExcluir({ cap, onCancel, onOk }: { cap: ChapterInfo; onCancel: 
   )
 }
 
-function MetasForm({ metas, onClose, onSave }: { metas: Metas; onClose: () => void; onSave: (m: Metas) => void }): ReactElement {
+function MetaCapForm({
+  titulo,
+  padrao,
+  atual,
+  onClose,
+  onSave
+}: {
+  titulo: string
+  padrao: number
+  atual: number | undefined
+  onClose: () => void
+  onSave: (meta: number | undefined) => void
+}): ReactElement {
+  const [v, setV] = useState(atual ? String(atual) : '')
+  return (
+    <Modal titulo="Meta deste capítulo" onClose={onClose} largura={380}>
+      <form
+        className="ms-form"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const n = Math.round(Number(v) || 0)
+          onSave(n > 0 ? n : undefined)
+        }}
+      >
+        <label className="field">
+          Palavras previstas para “{titulo}”
+          <input className="input" type="number" min={0} step={100} autoFocus placeholder={`${fmt(padrao)} (padrão)`} value={v} onChange={(e) => setV(e.target.value)} />
+        </label>
+        <p className="ms-modal-p">Deixe em branco para usar a meta padrão. Ao marcar o capítulo como pronto, o que faltou ou passou desta meta é repartido entre os capítulos seguintes.</p>
+        <div className="ms-row">
+          <button type="button" className="btn sm" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn sm pri">
+            Salvar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function MetasForm({ metas, soma, onClose, onSave }: { metas: Metas; soma: number; onClose: () => void; onSave: (m: Metas) => void }): ReactElement {
   const [cap, setCap] = useState(String(metas.metaCapitulo))
   const [livro, setLivro] = useState(String(metas.metaLivro))
   return (
@@ -435,6 +535,10 @@ function MetasForm({ metas, onClose, onSave }: { metas: Metas; onClose: () => vo
           Meta do livro
           <input className="input" type="number" min={0} step={1000} value={livro} onChange={(e) => setLivro(e.target.value)} />
         </label>
+        <p className="ms-modal-p">
+          Soma das metas de todos os capítulos: <b>{fmt(soma)}</b>
+          {Number(livro) > 0 && Math.abs(soma - Number(livro)) > 0 ? ` (a meta do livro é ${fmt(Number(livro))})` : ''}.
+        </p>
         <div className="ms-row">
           <button type="button" className="btn sm" onClick={onClose}>
             Cancelar

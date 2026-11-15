@@ -525,3 +525,5 @@
   .ms-tg .ms-chip.ms-sq, .ms-tg .ms-chip.ms-lbl2, .ms-tg .ms-chip.ms-foco:not(.on) { width: 30px; padding: 0; justify-content: center; }
   .ms-tg .ms-chip.ms-lbl1:not(.ms-foco) { padding: 0 7px; }
 }
+/* capítulo pronto: o percentual ganha o acento */
+.ms-ch.pronto .ms-ch-w { color: var(--acc); }
