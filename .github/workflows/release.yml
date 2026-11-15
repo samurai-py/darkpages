@@ -29,7 +29,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: SHA-256 dos instaladores
         shell: bash
-        run: cd release && sha256sum *.exe *.AppImage 2>/dev/null | tee "SHA256SUMS-${{ matrix.os }}.txt"
+        run: |
+          shopt -s nullglob
+          cd release
+          sha256sum *.exe *.AppImage | tee "SHA256SUMS-${{ matrix.os }}.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: darkpages-${{ matrix.os }}
@@ -43,6 +46,7 @@ jobs:
         shell: bash
         run: |
           gh release create "${{ github.ref_name }}" --title "Darkpages ${{ github.ref_name }}" --notes "Instaladores automáticos. Sem assinatura digital: no Windows, clique em Mais informações e depois em Executar assim mesmo." 2>/dev/null || true
+          shopt -s nullglob
           gh release upload "${{ github.ref_name }}" release/*.exe release/*.AppImage release/SHA256SUMS-*.txt --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
