@@ -34,7 +34,7 @@ const MODELOS: Record<Nuvem, string[]> = {
   anthropic: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
   openai: ['gpt-5.4-mini-2026-03-17', 'gpt-5.4-nano-2026-03-17', 'gpt-5.5-2026-04-23'],
   gemini: ['gemini-3.8-flash', 'gemini-2.5-flash-lite'],
-  groq: ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']
+  groq: ['openai/gpt-oss-120b']
 }
 
 type Nuvem = 'anthropic' | 'openai' | 'gemini' | 'groq'
