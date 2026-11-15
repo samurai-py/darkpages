@@ -107,7 +107,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Darkpages-Instalador-${version}.${ext}"
     },
     "linux": {
       "target": [
@@ -115,6 +116,9 @@
       ],
       "category": "Office"
     },
-    "artifactName": "Darkpages-${version}-${os}-${arch}.${ext}"
+    "artifactName": "Darkpages-${version}-${os}-${arch}.${ext}",
+    "portable": {
+      "artifactName": "Darkpages-Portatil-${version}.${ext}"
+    }
   }
 }
